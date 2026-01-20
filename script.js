@@ -21,3 +21,4 @@ function analyze() {
     signalText.style.color = "orange";
   }
 }
+
