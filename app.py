@@ -15,8 +15,6 @@ def calculate_ema(prices, period):
     for price in prices:
         ema = price * k + ema * (1 - k)
     return ema
-
-@app.route('/analyze')
 def detect_candle_pattern(data):
     if len(data) < 2:
         return "none"
@@ -38,6 +36,7 @@ def detect_candle_pattern(data):
         return "bearish_engulfing"
 
     return "none"
+@app.route('/analyze')
 def analyze():
     try:
         url = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=15min&outputsize=100&apikey={API_KEY}"
