@@ -3,26 +3,31 @@ import requests
 
 app = Flask(__name__)
 
-# Home route (test)
 @app.route('/')
 def home():
-    return "Forex Analyzer API is running"
+    return "Forex Analyzer PRO is running"
 
 API_KEY = "52489f2772614f87957488969609b2e1"
 
-# Analyze route
+def calculate_ema(prices, period):
+    k = 2 / (period + 1)
+    ema = prices[0]
+    for price in prices:
+        ema = price * k + ema * (1 - k)
+    return ema
+
 @app.route('/analyze')
 def analyze():
     try:
-        url = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=15min&outputsize=50&apikey={API_KEY}"
-        response = requests.get(url)
-        data = response.json()
+        url = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=15min&outputsize=100&apikey={API_KEY}"
+        data = requests.get(url).json()
 
         if "values" not in data:
             return jsonify({"error": data})
 
-        closes = [float(item['close']) for item in data['values']]
+        closes = [float(item['close']) for item in data['values']][::-1]
 
+        # RSI
         gains, losses = [], []
         for i in range(1, len(closes)):
             diff = closes[i] - closes[i-1]
@@ -37,19 +42,49 @@ def analyze():
         rs = avg_gain / avg_loss if avg_loss != 0 else 0
         rsi = 100 - (100 / (1 + rs))
 
-        trend = "bullish" if closes[-1] > sum(closes)/len(closes) else "bearish"
+        # EMA
+        ema50 = calculate_ema(closes[-50:], 50)
+        ema200 = calculate_ema(closes[-100:], 100)
 
-        if rsi < 30 and trend == "bullish":
+        trend = "bullish" if ema50 > ema200 else "bearish"
+
+        # Conditions
+        buy_conditions = 0
+        sell_conditions = 0
+
+        if rsi < 35:
+            buy_conditions += 1
+        if rsi > 65:
+            sell_conditions += 1
+
+        if ema50 > ema200:
+            buy_conditions += 1
+        else:
+            sell_conditions += 1
+
+        if trend == "bullish":
+            buy_conditions += 1
+        else:
+            sell_conditions += 1
+
+        # Decision
+        if buy_conditions >= 2:
             signal = "BUY"
-        elif rsi > 70 and trend == "bearish":
+            confidence = int((buy_conditions / 3) * 100)
+        elif sell_conditions >= 2:
             signal = "SELL"
+            confidence = int((sell_conditions / 3) * 100)
         else:
             signal = "WAIT"
+            confidence = 50
 
         return jsonify({
             "signal": signal,
+            "confidence": confidence,
             "rsi": round(rsi, 2),
-            "trend": trend
+            "trend": trend,
+            "ema50": round(ema50, 2),
+            "ema200": round(ema200, 2)
         })
 
     except Exception as e:
