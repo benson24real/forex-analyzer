@@ -3,8 +3,7 @@ import requests
 
 app = Flask(__name__)
 
-API_KEY = "PASTE_YOUR_API_KEY_HERE"
-
+API_KEY = "52489f2772614f87957488969609b2e1"
 @app.route('/analyze')
 def analyze():
     url = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=15min&outputsize=50&apikey={API_KEY}"
