@@ -49,7 +49,7 @@ def analyze():
         trend = "bullish" if ema50 > ema200 else "bearish"
 
         # 🚫 NO TRADE ZONE
-        if 45 <= rsi <= 55 and abs(ema50 - ema200) < 0.0005:
+        if 45 <= rsi <= 55 and abs(ema50 - ema200) < 0.0015:
             return jsonify({
                 "signal": "WAIT",
                 "confidence": 40,
