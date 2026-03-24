@@ -79,16 +79,7 @@ def analyze():
                 "ema50": round(ema50, 2),
                 "ema200": round(ema200, 2)
             })
-# Get higher timeframe (1H)
-url_higher = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=1h&outputsize=50&apikey={API_KEY}"
-data_higher = requests.get(url_higher).json()
 
-closes_higher = [float(item['close']) for item in data_higher['values']][::-1]
-
-ema50_higher = calculate_ema(closes_higher[-50:], 50)
-ema200_higher = calculate_ema(closes_higher[-50:], 50)
-
-higher_trend = "bullish" if ema50_higher > ema200_higher else "bearish"
         # Conditions
         buy_conditions = 0
         sell_conditions = 0
@@ -133,3 +124,13 @@ higher_trend = "bullish" if ema50_higher > ema200_higher else "bearish"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
+# Get higher timeframe (1H)
+url_higher = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=1h&outputsize=50&apikey={API_KEY}"
+data_higher = requests.get(url_higher).json()
+
+closes_higher = [float(item['close']) for item in data_higher['values']][::-1]
+
+ema50_higher = calculate_ema(closes_higher[-50:], 50)
+ema200_higher = calculate_ema(closes_higher[-50:], 50)
+
+higher_trend = "bullish" if ema50_higher > ema200_higher else "bearish"
