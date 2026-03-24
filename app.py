@@ -17,6 +17,27 @@ def calculate_ema(prices, period):
     return ema
 
 @app.route('/analyze')
+def detect_candle_pattern(data):
+    if len(data) < 2:
+        return "none"
+
+    prev = data[-2]
+    curr = data[-1]
+
+    prev_open = float(prev['open'])
+    prev_close = float(prev['close'])
+    curr_open = float(curr['open'])
+    curr_close = float(curr['close'])
+
+    # Bullish engulfing
+    if prev_close < prev_open and curr_close > curr_open and curr_close > prev_open and curr_open < prev_close:
+        return "bullish_engulfing"
+
+    # Bearish engulfing
+    if prev_close > prev_open and curr_close < curr_open and curr_open > prev_close and curr_close < prev_open:
+        return "bearish_engulfing"
+
+    return "none"
 def analyze():
     try:
         url = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=15min&outputsize=100&apikey={API_KEY}"
