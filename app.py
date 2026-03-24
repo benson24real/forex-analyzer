@@ -38,16 +38,6 @@ def detect_candle_pattern(data):
     return "none"
 @app.route('/analyze')
 def analyze():
-    # Get higher timeframe (1H)
-url_higher = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=1h&outputsize=50&apikey={API_KEY}"
-data_higher = requests.get(url_higher).json()
-
-closes_higher = [float(item['close']) for item in data_higher['values']][::-1]
-
-ema50_higher = calculate_ema(closes_higher[-50:], 50)
-ema200_higher = calculate_ema(closes_higher[-50:], 50)
-
-higher_trend = "bullish" if ema50_higher > ema200_higher else "bearish"
     try:
         url = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=15min&outputsize=100&apikey={API_KEY}"
         data = requests.get(url).json()
@@ -77,7 +67,16 @@ higher_trend = "bullish" if ema50_higher > ema200_higher else "bearish"
         ema200 = calculate_ema(closes[-100:], 100)
 
         trend = "bullish" if ema50 > ema200 else "bearish"
+# Get higher timeframe (1H)
+url_higher = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=1h&outputsize=50&apikey={API_KEY}"
+data_higher = requests.get(url_higher).json()
 
+closes_higher = [float(item['close']) for item in data_higher['values']][::-1]
+
+ema50_higher = calculate_ema(closes_higher[-50:], 50)
+ema200_higher = calculate_ema(closes_higher[-50:], 50)
+
+higher_trend = "bullish" if ema50_higher > ema200_higher else "bearish"
         # 🚫 NO TRADE ZONE
         if 45 <= rsi <= 55 and abs(ema50 - ema200) < 0.0015:
             return jsonify({
