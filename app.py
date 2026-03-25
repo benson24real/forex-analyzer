@@ -141,7 +141,12 @@ def analyze():
 
         # 💰 TRADE LEVELS
         current_price = closes[-1]
-        entry, sl, tp = calculate_trade_levels(current_price, signal)
+   entry, sl, tp = calculate_trade_levels(current_price, signal)
+
+if signal == "WAIT":
+    entry = "No trade"
+    sl = "No trade"
+    tp = "No trade"
 
         return jsonify({
             "signal": signal,
