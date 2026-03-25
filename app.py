@@ -7,7 +7,7 @@ app = Flask(__name__)
 def home():
     return "Forex Analyzer PRO is running"
 
-API_KEY = "52489f2772614f87957488969609b2e1"
+API_KEY = "YOUR_API_KEY_HERE"
 
 def calculate_ema(prices, period):
     k = 2 / (period + 1)
@@ -15,6 +15,7 @@ def calculate_ema(prices, period):
     for price in prices:
         ema = price * k + ema * (1 - k)
     return ema
+
 def detect_candle_pattern(data):
     if len(data) < 2:
         return "none"
@@ -27,15 +28,14 @@ def detect_candle_pattern(data):
     curr_open = float(curr['open'])
     curr_close = float(curr['close'])
 
-    # Bullish engulfing
-    if prev_close < prev_open and curr_close > curr_open and curr_close > prev_open and curr_open < prev_close:
+    if prev_close < prev_open and curr_close > curr_open:
         return "bullish_engulfing"
 
-    # Bearish engulfing
-    if prev_close > prev_open and curr_close < curr_open and curr_open > prev_close and curr_close < prev_open:
+    if prev_close > prev_open and curr_close < curr_open:
         return "bearish_engulfing"
 
     return "none"
+
 @app.route('/analyze')
 def analyze():
     try:
@@ -45,7 +45,8 @@ def analyze():
         if "values" not in data:
             return jsonify({"error": data})
 
-        closes = [float(item['close']) for item in data['values']][::-1]
+        values = data['values'][::-1]
+        closes = [float(item['close']) for item in values]
 
         # RSI
         gains, losses = [], []
@@ -68,55 +69,63 @@ def analyze():
 
         trend = "bullish" if ema50 > ema200 else "bearish"
 
-        # 🚫 NO TRADE ZONE
+        # Higher timeframe
+        url_higher = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=1h&outputsize=50&apikey={API_KEY}"
+        data_higher = requests.get(url_higher).json()
+        closes_higher = [float(item['close']) for item in data_higher['values']][::-1]
+
+        ema50_higher = calculate_ema(closes_higher[-50:], 50)
+        ema200_higher = calculate_ema(closes_higher[-50:], 50)
+
+        higher_trend = "bullish" if ema50_higher > ema200_higher else "bearish"
+
+        # Pattern
+        pattern = detect_candle_pattern(values)
+
+        # No trade zone
         if 45 <= rsi <= 55 and abs(ema50 - ema200) < 0.0015:
-            return jsonify({
-                "signal": "WAIT",
-                "confidence": 40,
-                "reason": "Market ranging / no clear direction",
-                "rsi": round(rsi, 2),
-                "trend": trend,
-                "ema50": round(ema50, 2),
-                "ema200": round(ema200, 2)
-            })
-
-        # Conditions
-        buy_conditions = 0
-        sell_conditions = 0
-
-        if rsi < 35:
-            buy_conditions += 1
-        if rsi > 65:
-            sell_conditions += 1
-
-        if ema50 > ema200:
-            buy_conditions += 1
-        else:
-            sell_conditions += 1
-
-        if trend == "bullish":
-            buy_conditions += 1
-        else:
-            sell_conditions += 1
-
-        # Decision
-        if buy_conditions >= 2:
-            signal = "BUY"
-            confidence = int((buy_conditions / 3) * 100)
-        elif sell_conditions >= 2:
-            signal = "SELL"
-            confidence = int((sell_conditions / 3) * 100)
-        else:
             signal = "WAIT"
-            confidence = 50
+            confidence = 40
+            message = "WAIT | Market ranging"
+        else:
+            buy_conditions = 0
+            sell_conditions = 0
+
+            if rsi < 35:
+                buy_conditions += 1
+            if rsi > 65:
+                sell_conditions += 1
+
+            if ema50 > ema200:
+                buy_conditions += 1
+            else:
+                sell_conditions += 1
+
+            if trend == "bullish":
+                buy_conditions += 1
+            else:
+                sell_conditions += 1
+
+            if buy_conditions >= 2:
+                signal = "BUY"
+                confidence = int((buy_conditions / 3) * 100)
+            elif sell_conditions >= 2:
+                signal = "SELL"
+                confidence = int((sell_conditions / 3) * 100)
+            else:
+                signal = "WAIT"
+                confidence = 50
+
+            message = f"{signal} | {confidence}% confidence"
 
         return jsonify({
             "signal": signal,
             "confidence": confidence,
-            "rsi": round(rsi, 2),
+            "message": message,
+            "pattern": pattern,
             "trend": trend,
-            "ema50": round(ema50, 2),
-            "ema200": round(ema200, 2)
+            "higher_trend": higher_trend,
+            "rsi": round(rsi, 2)
         })
 
     except Exception as e:
@@ -124,13 +133,3 @@ def analyze():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
-# Get higher timeframe (1H)
-url_higher = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=1h&outputsize=50&apikey={API_KEY}"
-data_higher = requests.get(url_higher).json()
-
-closes_higher = [float(item['close']) for item in data_higher['values']][::-1]
-
-ema50_higher = calculate_ema(closes_higher[-50:], 50)
-ema200_higher = calculate_ema(closes_higher[-50:], 50)
-
-higher_trend = "bullish" if ema50_higher > ema200_higher else "bearish"
