@@ -7,8 +7,9 @@ app = Flask(__name__)
 def home():
     return "Forex Analyzer PRO is running"
 
-API_KEY = "52489f2772614f87957488969609b2e1"
+API_KEY = "YOUR_API_KEY_HERE"
 
+# EMA
 def calculate_ema(prices, period):
     k = 2 / (period + 1)
     ema = prices[0]
@@ -16,6 +17,7 @@ def calculate_ema(prices, period):
         ema = price * k + ema * (1 - k)
     return ema
 
+# Candlestick pattern
 def detect_candle_pattern(data):
     if len(data) < 2:
         return "none"
@@ -36,6 +38,7 @@ def detect_candle_pattern(data):
 
     return "none"
 
+# Trade levels
 def calculate_trade_levels(price, signal):
     if signal == "BUY":
         entry = price
@@ -46,13 +49,14 @@ def calculate_trade_levels(price, signal):
         sl = price + 0.0030
         tp = price - 0.0060
     else:
-        entry = sl = tp = None
+        return "No trade", "No trade", "No trade"
 
-    return entry, sl, tp
+    return round(entry, 5), round(sl, 5), round(tp, 5)
 
 @app.route('/analyze')
 def analyze():
     try:
+        # 🔹 15min data
         url = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=15min&outputsize=100&apikey={API_KEY}"
         data = requests.get(url).json()
 
@@ -62,7 +66,7 @@ def analyze():
         values = data['values'][::-1]
         closes = [float(item['close']) for item in values]
 
-        # RSI
+        # 🔹 RSI
         gains, losses = [], []
         for i in range(1, len(closes)):
             diff = closes[i] - closes[i-1]
@@ -77,27 +81,31 @@ def analyze():
         rs = avg_gain / avg_loss if avg_loss != 0 else 0
         rsi = 100 - (100 / (1 + rs))
 
-        # EMA
+        # 🔹 EMA
         ema50 = calculate_ema(closes[-50:], 50)
         ema200 = calculate_ema(closes[-100:], 100)
 
         trend = "bullish" if ema50 > ema200 else "bearish"
 
-        # Higher timeframe
-        url_higher = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=1h&outputsize=50&apikey={API_KEY}"
-        data_higher = requests.get(url_higher).json()
+        # 🔹 Higher timeframe (1H)
+        try:
+            url_higher = f"https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=1h&outputsize=50&apikey={API_KEY}"
+            data_higher = requests.get(url_higher).json()
 
-        closes_higher = [float(item['close']) for item in data_higher['values']][::-1]
+            if "values" in data_higher:
+                closes_higher = [float(item['close']) for item in data_higher['values']][::-1]
+                ema50_higher = calculate_ema(closes_higher[-50:], 50)
+                ema200_higher = calculate_ema(closes_higher[-50:], 50)
+                higher_trend = "bullish" if ema50_higher > ema200_higher else "bearish"
+            else:
+                higher_trend = "unknown"
+        except:
+            higher_trend = "unknown"
 
-        ema50_higher = calculate_ema(closes_higher[-50:], 50)
-        ema200_higher = calculate_ema(closes_higher[-50:], 50)
-
-        higher_trend = "bullish" if ema50_higher > ema200_higher else "bearish"
-
-        # Pattern
+        # 🔹 Pattern
         pattern = detect_candle_pattern(values)
 
-        # No trade zone
+        # 🚫 No trade zone
         if 45 <= rsi <= 55 and abs(ema50 - ema200) < 0.0015:
             signal = "WAIT"
             confidence = 40
@@ -133,7 +141,7 @@ def analyze():
 
             message = f"{signal} | {confidence}% confidence"
 
-        # Trade levels
+        # 💰 Trade levels (safe)
         current_price = closes[-1]
         entry, sl, tp = calculate_trade_levels(current_price, signal)
 
