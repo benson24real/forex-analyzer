@@ -7,7 +7,7 @@ app = Flask(__name__)
 def home():
     return "Forex Analyzer PRO is running"
 
-API_KEY = "YOUR_API_KEY_HERE"
+API_KEY = "52489f2772614f87957488969609b2e1"
 
 # EMA
 def calculate_ema(prices, period):
