@@ -136,7 +136,7 @@ def analyze():
 
         try:
 
-            url = f"https://api.twelvedata.com/time_series?symbol={pair}&interval=15min&outputsize=100&apikey={API_KEY}&dp=5"
+            url=f"https://api.twelvedata.com/time_series?symbol={pair}&interval=15min&outputsize=100&apikey={API_KEY}"
 
             data=requests.get(url).json()
 
@@ -146,7 +146,9 @@ def analyze():
             values=data["values"][::-1]
 
             closes=[float(v["close"]) for v in values]
-          volumes=[float(v.get("volume",1)) for v in values]
+
+            # SAFE volume handling
+            volumes=[float(v.get("volume",1)) for v in values]
 
             price=closes[-1]
 
@@ -244,7 +246,7 @@ def analyze():
             if best is None or confidence>best["confidence"]:
                 best=trade
 
-        except:
+        except Exception as e:
             continue
 
 
