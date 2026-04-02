@@ -136,7 +136,7 @@ def analyze():
 
         try:
 
-            url=f"https://api.twelvedata.com/time_series?symbol={pair}&interval=15min&outputsize=100&apikey={API_KEY}"
+            url = f"https://api.twelvedata.com/time_series?symbol={pair}&interval=15min&outputsize=100&apikey={API_KEY}&dp=5"
 
             data=requests.get(url).json()
 
