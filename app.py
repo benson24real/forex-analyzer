@@ -3,13 +3,14 @@ import requests
 
 app = Flask(__name__)
 
-@app.route('/')
+@app.route("/")
 def home():
     return "Forex Analyzer PRO is running"
 
 API_KEY = "YOUR_TWELVEDATA_API_KEY"
 
 PAIRS = ["EUR/USD","GBP/USD","USD/JPY","AUD/USD","XAU/USD"]
+
 
 # EMA
 def calculate_ema(prices, period):
@@ -44,13 +45,13 @@ def detect_pattern(data):
     prev = data[-2]
     curr = data[-1]
 
-    prev_open = float(prev['open'])
-    prev_close = float(prev['close'])
+    prev_open = float(prev["open"])
+    prev_close = float(prev["close"])
 
-    curr_open = float(curr['open'])
-    curr_close = float(curr['close'])
-    curr_high = float(curr['high'])
-    curr_low = float(curr['low'])
+    curr_open = float(curr["open"])
+    curr_close = float(curr["close"])
+    curr_high = float(curr["high"])
+    curr_low = float(curr["low"])
 
     body = abs(curr_close - curr_open)
     candle_range = curr_high - curr_low
@@ -64,13 +65,58 @@ def detect_pattern(data):
     if body < candle_range * 0.1:
         return "doji"
 
-    if (curr_close > curr_open and
-        (curr_open - curr_low) > body*2):
+    if curr_close > curr_open and (curr_open - curr_low) > body * 2:
         return "hammer"
 
-    if (curr_open > curr_close and
-        (curr_high - curr_open) > body*2):
+    if curr_open > curr_close and (curr_high - curr_open) > body * 2:
         return "shooting_star"
+
+    return "none"
+
+
+# Support & Resistance
+def detect_levels(prices):
+
+    support = min(prices[-20:])
+    resistance = max(prices[-20:])
+
+    return support, resistance
+
+
+# Liquidity sweep detection
+def detect_liquidity_sweep(data):
+
+    last = data[-1]
+    prev = data[-2]
+
+    last_high = float(last["high"])
+    last_low = float(last["low"])
+
+    prev_high = float(prev["high"])
+    prev_low = float(prev["low"])
+
+    if last_high > prev_high:
+        return "buy_side_liquidity_taken"
+
+    if last_low < prev_low:
+        return "sell_side_liquidity_taken"
+
+    return "none"
+
+
+# Break of Structure
+def detect_bos(prices):
+
+    recent_high = max(prices[-10:])
+    recent_low = min(prices[-10:])
+
+    current = prices[-1]
+
+    if current > recent_high:
+        return "bullish_bos"
+
+    if current < recent_low:
+        return "bearish_bos"
 
     return "none"
 
@@ -91,10 +137,10 @@ def calculate_trade_levels(price, signal):
     else:
         return "No trade","No trade","No trade"
 
-    return round(entry,5),round(sl,5),round(tp,5)
+    return round(entry,5), round(sl,5), round(tp,5)
 
 
-@app.route('/analyze')
+@app.route("/analyze")
 def analyze():
 
     best_trade = None
@@ -109,129 +155,176 @@ def analyze():
             if "values" not in data:
                 continue
 
-            values = data['values'][::-1]
+            values = data["values"][::-1]
 
-            closes = [float(v['close']) for v in values]
-            volumes = [float(v['volume']) for v in values]
+            closes = [float(v["close"]) for v in values]
+            volumes = [float(v["volume"]) for v in values]
 
             price = closes[-1]
 
             # RSI
-            gains=[]
-            losses=[]
+            gains = []
+            losses = []
 
             for i in range(1,len(closes)):
 
-                diff = closes[i]-closes[i-1]
+                diff = closes[i] - closes[i-1]
 
-                if diff>0:
+                if diff > 0:
                     gains.append(diff)
                 else:
                     losses.append(abs(diff))
 
-            avg_gain=sum(gains)/len(gains) if gains else 0
-            avg_loss=sum(losses)/len(losses) if losses else 1
+            avg_gain = sum(gains)/len(gains) if gains else 0
+            avg_loss = sum(losses)/len(losses) if losses else 1
 
-            rs=avg_gain/avg_loss
-            rsi=100-(100/(1+rs))
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100/(1+rs))
 
-            # EMA trend
+
+            # EMA
             ema50 = calculate_ema(closes[-50:],50)
             ema200 = calculate_ema(closes[-100:],100)
 
             trend = "bullish" if ema50 > ema200 else "bearish"
 
+
             # MACD
             macd, macd_signal = calculate_macd(closes)
 
+
             # Volume confirmation
             avg_volume = sum(volumes[-20:]) / 20
-            current_volume = volumes[-1]
+            volume_confirm = volumes[-1] > avg_volume
 
-            volume_confirm = current_volume > avg_volume
 
-            # Pattern
+            # Patterns
             pattern = detect_pattern(values)
+
+
+            # Support resistance
+            support, resistance = detect_levels(closes)
+
+
+            # Liquidity sweep
+            liquidity = detect_liquidity_sweep(values)
+
+
+            # Break of structure
+            bos = detect_bos(closes)
+
 
             buy = 0
             sell = 0
 
-            # RSI
+
             if rsi < 35:
-                buy +=1
+                buy += 1
+
             if rsi > 65:
-                sell +=1
+                sell += 1
 
-            # EMA trend
+
             if ema50 > ema200:
-                buy +=1
+                buy += 1
             else:
-                sell +=1
+                sell += 1
 
-            # MACD
+
             if macd > macd_signal:
-                buy +=1
+                buy += 1
             else:
-                sell +=1
+                sell += 1
 
-            # Volume
+
             if volume_confirm:
-                buy +=1
-                sell +=1
+                buy += 1
+                sell += 1
 
-            # Pattern
+
             if pattern in ["bullish_engulfing","hammer"]:
-                buy +=1
+                buy += 1
 
             if pattern in ["bearish_engulfing","shooting_star"]:
-                sell +=1
+                sell += 1
 
-            if buy >=3:
-                signal="BUY"
-                confidence=int((buy/5)*100)
 
-            elif sell >=3:
-                signal="SELL"
-                confidence=int((sell/5)*100)
+            if price <= support * 1.002:
+                buy += 1
+
+            if price >= resistance * 0.998:
+                sell += 1
+
+
+            if liquidity == "sell_side_liquidity_taken":
+                buy += 1
+
+            if liquidity == "buy_side_liquidity_taken":
+                sell += 1
+
+
+            if bos == "bullish_bos":
+                buy += 1
+
+            if bos == "bearish_bos":
+                sell += 1
+
+
+            if buy >= 4:
+                signal = "BUY"
+                confidence = int((buy/8)*100)
+
+            elif sell >= 4:
+                signal = "SELL"
+                confidence = int((sell/8)*100)
 
             else:
-                signal="WAIT"
-                confidence=40
+                signal = "WAIT"
+                confidence = 40
 
-            entry,sl,tp = calculate_trade_levels(price,signal)
+
+            entry, sl, tp = calculate_trade_levels(price, signal)
+
 
             trade = {
 
-                "pair":pair,
-                "signal":signal,
-                "confidence":confidence,
-                "trend":trend,
-                "pattern":pattern,
-                "rsi":round(rsi,2),
-                "macd":round(macd,4),
-                "volume_confirmed":volume_confirm,
-                "entry":entry,
-                "stop_loss":sl,
-                "take_profit":tp
-
+                "pair": pair,
+                "signal": signal,
+                "confidence": confidence,
+                "trend": trend,
+                "pattern": pattern,
+                "liquidity": liquidity,
+                "bos": bos,
+                "rsi": round(rsi,2),
+                "macd": round(macd,4),
+                "volume_confirmed": volume_confirm,
+                "support": round(support,5),
+                "resistance": round(resistance,5),
+                "entry": entry,
+                "stop_loss": sl,
+                "take_profit": tp
             }
+
 
             if best_trade is None or confidence > best_trade["confidence"]:
                 best_trade = trade
 
+
         except:
             continue
 
-  # If no trade found
-if best_trade is None:
-    return jsonify({
-        "signal": "WAIT",
-        "confidence": 0,
-        "message": "No valid market data available"
-    })
 
-return jsonify(best_trade)
+    if best_trade is None:
+
+        return jsonify({
+            "signal":"WAIT",
+            "confidence":0,
+            "message":"No valid market data available"
+        })
+
+
+    return jsonify(best_trade)
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0",port=10000)
+    app.run(host="0.0.0.0", port=10000)
