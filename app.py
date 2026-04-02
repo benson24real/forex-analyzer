@@ -146,7 +146,7 @@ def analyze():
             values=data["values"][::-1]
 
             closes=[float(v["close"]) for v in values]
-            volumes=[float(v["volume"]) for v in values]
+          volumes=[float(v.get("volume",1)) for v in values]
 
             price=closes[-1]
 
