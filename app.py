@@ -222,7 +222,15 @@ def analyze():
         except:
             continue
 
-    return jsonify(best_trade)
+  # If no trade found
+if best_trade is None:
+    return jsonify({
+        "signal": "WAIT",
+        "confidence": 0,
+        "message": "No valid market data available"
+    })
+
+return jsonify(best_trade)
 
 
 if __name__ == "__main__":
