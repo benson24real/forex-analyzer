@@ -7,7 +7,7 @@ app = Flask(__name__)
 def home():
     return "Forex Analyzer PRO is running"
 
-API_KEY = "YOUR_TWELVEDATA_API_KEY"
+API_KEY = "52489f2772614f87957488969609b2e1"
 
 PAIRS = ["EUR/USD","GBP/USD","USD/JPY","AUD/USD","XAU/USD"]
 
