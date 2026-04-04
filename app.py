@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request
 import requests
 import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 
@@ -16,7 +17,7 @@ CHAT_ID = "928499759"
 
 
 # =========================
-# MARKETS (TOTAL = 20)
+# MARKETS
 # =========================
 
 FOREX_PAIRS = [
@@ -38,28 +39,7 @@ SYNTHETIC_PAIRS = [
 "StepIndex"
 ]
 
-
-# =========================
-# ROTATION CONTROL
-# =========================
-
 CURRENT_PAIR_INDEX = 0
-
-
-def get_next_pair():
-
-    global CURRENT_PAIR_INDEX
-
-    all_pairs = FOREX_PAIRS + CRYPTO_PAIRS + SYNTHETIC_PAIRS
-
-    pair = all_pairs[CURRENT_PAIR_INDEX]
-
-    CURRENT_PAIR_INDEX += 1
-
-    if CURRENT_PAIR_INDEX >= len(all_pairs):
-        CURRENT_PAIR_INDEX = 0
-
-    return pair
 
 
 # =========================
@@ -82,7 +62,7 @@ def send_telegram(message):
 
 
 # =========================
-# FOREX MARKET STATUS
+# FOREX WEEKEND FILTER
 # =========================
 
 def forex_market_open():
@@ -94,6 +74,26 @@ def forex_market_open():
         return False
 
     return True
+
+
+# =========================
+# ROTATION SYSTEM
+# =========================
+
+def get_next_pair():
+
+    global CURRENT_PAIR_INDEX
+
+    all_pairs = FOREX_PAIRS + CRYPTO_PAIRS + SYNTHETIC_PAIRS
+
+    pair = all_pairs[CURRENT_PAIR_INDEX]
+
+    CURRENT_PAIR_INDEX += 1
+
+    if CURRENT_PAIR_INDEX >= len(all_pairs):
+        CURRENT_PAIR_INDEX = 0
+
+    return pair
 
 
 # =========================
@@ -178,7 +178,7 @@ def atr(data,period=14):
 
 
 # =========================
-# CANDLE PATTERN
+# PATTERN
 # =========================
 
 def pattern(data):
@@ -214,7 +214,7 @@ def levels(prices):
 
 
 # =========================
-# BOS
+# BREAK OF STRUCTURE
 # =========================
 
 def bos(prices):
@@ -291,119 +291,103 @@ def get_data(pair,interval):
 
     closes=[float(v["close"]) for v in values]
 
-    volumes=[float(v.get("volume",1)) for v in values]
-
-    return values,closes,volumes
+    return values,closes
 
 
 # =========================
 # ANALYZER
 # =========================
 
-def analyze_pairs(pairs):
+def analyze_pair(pair):
 
-    trades=[]
+    entry=get_data(pair,"15min")
+    confirm=get_data(pair,"1h")
+    trend=get_data(pair,"4h")
 
-    for pair in pairs:
-
-        try:
-
-            entry=get_data(pair,"15min")
-            confirm=get_data(pair,"1h")
-            trend=get_data(pair,"4h")
-
-            if entry is None or confirm is None or trend is None:
-                continue
-
-            values,closes,volumes=entry
-            _,closes1h,_=confirm
-            _,closes4h,_=trend
-
-            price=closes[-1]
-
-            ema50_4h=ema(closes4h[-50:],50)
-            ema200_4h=ema(closes4h[-100:],100)
-
-            higher="bullish" if ema50_4h>ema200_4h else "bearish"
-
-            ema50_1h=ema(closes1h[-50:],50)
-            ema200_1h=ema(closes1h[-100:],100)
-
-            confirm_trend="bullish" if ema50_1h>ema200_1h else "bearish"
-
-            rsi_value=rsi(closes)
-
-            macd_value,macd_signal=macd(closes)
-
-            patt=pattern(values)
-
-            support,resistance=levels(closes)
-
-            bos_signal=bos(closes)
-
-            sweep_signal=sweep(values)
-
-            atr_value=atr(values)
-
-            if atr_value > (price*0.005):
-                continue
-
-            buy=0
-            sell=0
-
-            if higher=="bullish": buy+=2
-            else: sell+=2
-
-            if confirm_trend=="bullish": buy+=1
-            else: sell+=1
-
-            if rsi_value < 35: buy+=1
-            if rsi_value > 65: sell+=1
-
-            if macd_value > macd_signal: buy+=1
-            else: sell+=1
-
-            if patt=="bullish_engulfing": buy+=1
-            if patt=="bearish_engulfing": sell+=1
-
-            if bos_signal=="bullish_bos": buy+=1
-            if bos_signal=="bearish_bos": sell+=1
-
-            if sweep_signal=="buy_liquidity_sweep": buy+=1
-            if sweep_signal=="sell_liquidity_sweep": sell+=1
-
-            if price <= support*1.002: buy+=1
-            if price >= resistance*0.998: sell+=1
-
-            if buy >= 6:
-                signal="BUY"
-                confidence=int((buy/10)*100)
-
-            elif sell >= 6:
-                signal="SELL"
-                confidence=int((sell/10)*100)
-
-            else:
-                continue
-
-            entry_price,sl,tp=trade_levels(price,signal)
-
-            trades.append({
-                "pair":pair,
-                "signal":signal,
-                "confidence":confidence,
-                "entry":entry_price,
-                "stop_loss":sl,
-                "take_profit":tp
-            })
-
-        except:
-            continue
-
-    if len(trades)==0:
+    if entry is None or confirm is None or trend is None:
         return None
 
-    return max(trades,key=lambda x:x["confidence"])
+    values,closes=entry
+    _,closes1h=confirm
+    _,closes4h=trend
+
+    price=closes[-1]
+
+    ema50_4h=ema(closes4h[-50:],50)
+    ema200_4h=ema(closes4h[-100:],100)
+
+    higher="bullish" if ema50_4h>ema200_4h else "bearish"
+
+    ema50_1h=ema(closes1h[-50:],50)
+    ema200_1h=ema(closes1h[-100:],100)
+
+    confirm_trend="bullish" if ema50_1h>ema200_1h else "bearish"
+
+    rsi_value=rsi(closes)
+
+    macd_value,macd_signal=macd(closes)
+
+    patt=pattern(values)
+
+    support,resistance=levels(closes)
+
+    bos_signal=bos(closes)
+
+    sweep_signal=sweep(values)
+
+    atr_value=atr(values)
+
+    if atr_value > (price*0.005):
+        return None
+
+    buy=0
+    sell=0
+
+    if higher=="bullish": buy+=2
+    else: sell+=2
+
+    if confirm_trend=="bullish": buy+=1
+    else: sell+=1
+
+    if rsi_value < 35: buy+=1
+    if rsi_value > 65: sell+=1
+
+    if macd_value > macd_signal: buy+=1
+    else: sell+=1
+
+    if patt=="bullish_engulfing": buy+=1
+    if patt=="bearish_engulfing": sell+=1
+
+    if bos_signal=="bullish_bos": buy+=1
+    if bos_signal=="bearish_bos": sell+=1
+
+    if sweep_signal=="buy_liquidity_sweep": buy+=1
+    if sweep_signal=="sell_liquidity_sweep": sell+=1
+
+    if price <= support*1.002: buy+=1
+    if price >= resistance*0.998: sell+=1
+
+    if buy >= 6:
+        signal="BUY"
+        confidence=int((buy/10)*100)
+
+    elif sell >= 6:
+        signal="SELL"
+        confidence=int((sell/10)*100)
+
+    else:
+        return None
+
+    entry_price,sl,tp=trade_levels(price,signal)
+
+    return {
+        "pair":pair,
+        "signal":signal,
+        "confidence":confidence,
+        "entry":entry_price,
+        "stop_loss":sl,
+        "take_profit":tp
+    }
 
 
 # =========================
@@ -413,34 +397,25 @@ def analyze_pairs(pairs):
 @app.route("/analyze")
 def analyze():
 
-    requested_pair = request.args.get("pair")
+    requested_pair=request.args.get("pair")
 
     if requested_pair:
 
         pair=requested_pair.upper()
 
-        result=analyze_pairs([pair])
-
-        if result is None:
-            return jsonify({
-                "pair":pair,
-                "signal":"WAIT",
-                "message":"No setup"
-            })
-
     else:
 
         pair=get_next_pair()
 
-        result=analyze_pairs([pair])
+    result=analyze_pair(pair)
 
-        if result is None:
-            return jsonify({
-                "pair":pair,
-                "signal":"WAIT",
-                "message":"No setup"
-            })
+    if result is None:
 
+        return jsonify({
+            "pair":pair,
+            "signal":"WAIT",
+            "message":"No setup"
+        })
 
     message=f"""
 TRADING SIGNAL
@@ -457,6 +432,45 @@ TP: {result['take_profit']}
     send_telegram(message)
 
     return jsonify(result)
+
+
+# =========================
+# AUTO SCANNER
+# =========================
+
+def auto_scan():
+
+    pair=get_next_pair()
+
+    result=analyze_pair(pair)
+
+    if result is None:
+        return
+
+    message=f"""
+AUTO SIGNAL
+
+Pair: {result['pair']}
+Signal: {result['signal']}
+Confidence: {result['confidence']}%
+
+Entry: {result['entry']}
+SL: {result['stop_loss']}
+TP: {result['take_profit']}
+"""
+
+    send_telegram(message)
+
+
+scheduler=BackgroundScheduler()
+
+scheduler.add_job(
+    func=auto_scan,
+    trigger="interval",
+    minutes=10
+)
+
+scheduler.start()
 
 
 if __name__=="__main__":
