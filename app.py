@@ -9,7 +9,7 @@ def home():
     return "Forex, Crypto & Synthetic Analyzer PRO running"
 
 
-API_KEY = "YOUR_TWELVEDATA_KEY"
+API_KEY = "52489f2772614f87957488969609b2e1"
 
 TELEGRAM_TOKEN = "YOUR_BOT_TOKEN"
 CHAT_ID = "YOUR_CHAT_ID"
