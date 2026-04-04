@@ -7,17 +7,16 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Forex, Crypto & Synthetic Analyzer PRO running"
+    return "Forex Crypto Synthetic Analyzer PRO running"
 
 
 API_KEY = "52489f2772614f87957488969609b2e1"
-
 TELEGRAM_TOKEN = "8764783714:AAF0KdadTOWBcyMW_KpSdZfcWwrqiShELlw"
 CHAT_ID = "928499759"
 
 
 # =========================
-# MARKETS
+# MARKETS (TOTAL 20)
 # =========================
 
 FOREX_PAIRS = [
@@ -48,11 +47,11 @@ CURRENT_PAIR_INDEX = 0
 
 def send_telegram(message):
 
-    url=f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
-    payload={
-        "chat_id":CHAT_ID,
-        "text":message
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": message
     }
 
     try:
@@ -67,8 +66,8 @@ def send_telegram(message):
 
 def forex_market_open():
 
-    now=datetime.datetime.utcnow()
-    day=now.weekday()
+    now = datetime.datetime.utcnow()
+    day = now.weekday()
 
     if day == 5 or day == 6:
         return False
@@ -77,7 +76,7 @@ def forex_market_open():
 
 
 # =========================
-# ROTATION SYSTEM
+# ROTATION
 # =========================
 
 def get_next_pair():
@@ -102,11 +101,11 @@ def get_next_pair():
 
 def ema(prices,period):
 
-    k=2/(period+1)
-    value=prices[0]
+    k = 2/(period+1)
+    value = prices[0]
 
     for p in prices:
-        value=p*k+value*(1-k)
+        value = p*k + value*(1-k)
 
     return value
 
@@ -117,11 +116,11 @@ def ema(prices,period):
 
 def macd(prices):
 
-    ema12=ema(prices[-12:],12)
-    ema26=ema(prices[-26:],26)
+    ema12 = ema(prices[-12:],12)
+    ema26 = ema(prices[-26:],26)
 
-    macd_value=ema12-ema26
-    signal=ema(prices[-9:],9)
+    macd_value = ema12 - ema26
+    signal = ema(prices[-9:],9)
 
     return macd_value,signal
 
@@ -178,7 +177,7 @@ def atr(data,period=14):
 
 
 # =========================
-# PATTERN
+# CANDLE PATTERN
 # =========================
 
 def pattern(data):
@@ -275,7 +274,7 @@ def trade_levels(price,signal):
 
 
 # =========================
-# GET DATA
+# GET MARKET DATA
 # =========================
 
 def get_data(pair,interval):
@@ -295,7 +294,7 @@ def get_data(pair,interval):
 
 
 # =========================
-# ANALYZER
+# ANALYZE PAIR
 # =========================
 
 def analyze_pair(pair):
@@ -367,11 +366,11 @@ def analyze_pair(pair):
     if price <= support*1.002: buy+=1
     if price >= resistance*0.998: sell+=1
 
-    if buy >= 6:
+    if buy>=6:
         signal="BUY"
         confidence=int((buy/10)*100)
 
-    elif sell >= 6:
+    elif sell>=6:
         signal="SELL"
         confidence=int((sell/10)*100)
 
@@ -400,17 +399,13 @@ def analyze():
     requested_pair=request.args.get("pair")
 
     if requested_pair:
-
         pair=requested_pair.upper()
-
     else:
-
         pair=get_next_pair()
 
     result=analyze_pair(pair)
 
     if result is None:
-
         return jsonify({
             "pair":pair,
             "signal":"WAIT",
