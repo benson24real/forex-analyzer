@@ -1,29 +1,70 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import requests
+import datetime
 
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Forex Analyzer PRO running"
+    return "Forex, Crypto & Synthetic Analyzer PRO running"
 
-API_KEY = "52489f2772614f87957488969609b2e1"
+
+API_KEY = "YOUR_TWELVEDATA_KEY"
 
 TELEGRAM_TOKEN = "YOUR_BOT_TOKEN"
 CHAT_ID = "YOUR_CHAT_ID"
 
-PAIRS = [
+
+# =========================
+# MARKETS (TOTAL = 20)
+# =========================
+
+FOREX_PAIRS = [
 "EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD",
 "NZD/USD","EUR/GBP","EUR/JPY","GBP/JPY","EUR/AUD",
-"GBP/AUD","AUD/JPY","CAD/JPY","CHF/JPY",
-"EUR/CAD","GBP/CAD","AUD/CAD","NZD/JPY",
+"GBP/AUD","AUD/JPY",
 "XAU/USD","XAG/USD"
 ]
 
+CRYPTO_PAIRS = [
+"BTC/USD",
+"ETH/USD"
+]
 
-# =====================
+SYNTHETIC_PAIRS = [
+"Boom100",
+"Boom200",
+"Crash200",
+"StepIndex"
+]
+
+
+# =========================
+# ROTATION CONTROL
+# =========================
+
+CURRENT_PAIR_INDEX = 0
+
+
+def get_next_pair():
+
+    global CURRENT_PAIR_INDEX
+
+    all_pairs = FOREX_PAIRS + CRYPTO_PAIRS + SYNTHETIC_PAIRS
+
+    pair = all_pairs[CURRENT_PAIR_INDEX]
+
+    CURRENT_PAIR_INDEX += 1
+
+    if CURRENT_PAIR_INDEX >= len(all_pairs):
+        CURRENT_PAIR_INDEX = 0
+
+    return pair
+
+
+# =========================
 # TELEGRAM
-# =====================
+# =========================
 
 def send_telegram(message):
 
@@ -40,9 +81,24 @@ def send_telegram(message):
         pass
 
 
-# =====================
+# =========================
+# FOREX MARKET STATUS
+# =========================
+
+def forex_market_open():
+
+    now=datetime.datetime.utcnow()
+    day=now.weekday()
+
+    if day == 5 or day == 6:
+        return False
+
+    return True
+
+
+# =========================
 # EMA
-# =====================
+# =========================
 
 def ema(prices,period):
 
@@ -55,9 +111,9 @@ def ema(prices,period):
     return value
 
 
-# =====================
+# =========================
 # MACD
-# =====================
+# =========================
 
 def macd(prices):
 
@@ -70,9 +126,9 @@ def macd(prices):
     return macd_value,signal
 
 
-# =====================
+# =========================
 # RSI
-# =====================
+# =========================
 
 def rsi(prices):
 
@@ -96,9 +152,9 @@ def rsi(prices):
     return 100-(100/(1+rs))
 
 
-# =====================
+# =========================
 # ATR
-# =====================
+# =========================
 
 def atr(data,period=14):
 
@@ -121,9 +177,9 @@ def atr(data,period=14):
     return sum(trs[-period:])/period
 
 
-# =====================
-# PATTERN
-# =====================
+# =========================
+# CANDLE PATTERN
+# =========================
 
 def pattern(data):
 
@@ -135,27 +191,19 @@ def pattern(data):
 
     curr_open=float(curr["open"])
     curr_close=float(curr["close"])
-    curr_high=float(curr["high"])
-    curr_low=float(curr["low"])
 
-    body=abs(curr_close-curr_open)
-    rng=curr_high-curr_low
-
-    if prev_close<prev_open and curr_close>curr_open:
+    if prev_close < prev_open and curr_close > curr_open:
         return "bullish_engulfing"
 
-    if prev_close>prev_open and curr_close<curr_open:
+    if prev_close > prev_open and curr_close < curr_open:
         return "bearish_engulfing"
-
-    if body<rng*0.1:
-        return "doji"
 
     return "none"
 
 
-# =====================
-# SUPPORT / RESISTANCE
-# =====================
+# =========================
+# SUPPORT RESISTANCE
+# =========================
 
 def levels(prices):
 
@@ -165,9 +213,9 @@ def levels(prices):
     return support,resistance
 
 
-# =====================
+# =========================
 # BOS
-# =====================
+# =========================
 
 def bos(prices):
 
@@ -184,41 +232,41 @@ def bos(prices):
     return "none"
 
 
-# =====================
-# LIQUIDITY
-# =====================
+# =========================
+# LIQUIDITY SWEEP
+# =========================
 
 def sweep(data):
 
     last=data[-1]
     prev=data[-2]
 
-    if float(last["high"])>float(prev["high"]):
+    if float(last["high"]) > float(prev["high"]):
         return "buy_liquidity_sweep"
 
-    if float(last["low"])<float(prev["low"]):
+    if float(last["low"]) < float(prev["low"]):
         return "sell_liquidity_sweep"
 
     return "none"
 
 
-# =====================
+# =========================
 # TRADE LEVELS
-# =====================
+# =========================
 
 def trade_levels(price,signal):
 
     if signal=="BUY":
 
         entry=price
-        sl=price-0.0030
-        tp=price+0.0060
+        sl=price-(price*0.003)
+        tp=price+(price*0.006)
 
     elif signal=="SELL":
 
         entry=price
-        sl=price+0.0030
-        tp=price-0.0060
+        sl=price+(price*0.003)
+        tp=price-(price*0.006)
 
     else:
         return "No trade","No trade","No trade"
@@ -226,9 +274,9 @@ def trade_levels(price,signal):
     return round(entry,5),round(sl,5),round(tp,5)
 
 
-# =====================
+# =========================
 # GET DATA
-# =====================
+# =========================
 
 def get_data(pair,interval):
 
@@ -248,16 +296,15 @@ def get_data(pair,interval):
     return values,closes,volumes
 
 
-# =====================
+# =========================
 # ANALYZER
-# =====================
+# =========================
 
-@app.route("/analyze")
-def analyze():
+def analyze_pairs(pairs):
 
     trades=[]
 
-    for pair in PAIRS:
+    for pair in pairs:
 
         try:
 
@@ -298,7 +345,7 @@ def analyze():
 
             atr_value=atr(values)
 
-            if atr_value>(price*0.005):
+            if atr_value > (price*0.005):
                 continue
 
             buy=0
@@ -310,10 +357,10 @@ def analyze():
             if confirm_trend=="bullish": buy+=1
             else: sell+=1
 
-            if rsi_value<35: buy+=1
-            if rsi_value>65: sell+=1
+            if rsi_value < 35: buy+=1
+            if rsi_value > 65: sell+=1
 
-            if macd_value>macd_signal: buy+=1
+            if macd_value > macd_signal: buy+=1
             else: sell+=1
 
             if patt=="bullish_engulfing": buy+=1
@@ -325,14 +372,14 @@ def analyze():
             if sweep_signal=="buy_liquidity_sweep": buy+=1
             if sweep_signal=="sell_liquidity_sweep": sell+=1
 
-            if price<=support*1.002: buy+=1
-            if price>=resistance*0.998: sell+=1
+            if price <= support*1.002: buy+=1
+            if price >= resistance*0.998: sell+=1
 
-            if buy>=6:
+            if buy >= 6:
                 signal="BUY"
                 confidence=int((buy/10)*100)
 
-            elif sell>=6:
+            elif sell >= 6:
                 signal="SELL"
                 confidence=int((sell/10)*100)
 
@@ -341,47 +388,75 @@ def analyze():
 
             entry_price,sl,tp=trade_levels(price,signal)
 
-            trade={
+            trades.append({
                 "pair":pair,
                 "signal":signal,
                 "confidence":confidence,
                 "entry":entry_price,
                 "stop_loss":sl,
                 "take_profit":tp
-            }
-
-            trades.append(trade)
+            })
 
         except:
             continue
 
-
     if len(trades)==0:
-        return jsonify({
-            "signal":"WAIT",
-            "confidence":0,
-            "message":"No strong setups"
-        })
+        return None
+
+    return max(trades,key=lambda x:x["confidence"])
 
 
-    best=max(trades,key=lambda x:x["confidence"])
+# =========================
+# API ENDPOINT
+# =========================
+
+@app.route("/analyze")
+def analyze():
+
+    requested_pair = request.args.get("pair")
+
+    if requested_pair:
+
+        pair=requested_pair.upper()
+
+        result=analyze_pairs([pair])
+
+        if result is None:
+            return jsonify({
+                "pair":pair,
+                "signal":"WAIT",
+                "message":"No setup"
+            })
+
+    else:
+
+        pair=get_next_pair()
+
+        result=analyze_pairs([pair])
+
+        if result is None:
+            return jsonify({
+                "pair":pair,
+                "signal":"WAIT",
+                "message":"No setup"
+            })
 
 
     message=f"""
-FOREX SIGNAL
+TRADING SIGNAL
 
-Pair: {best['pair']}
-Signal: {best['signal']}
-Confidence: {best['confidence']}%
+Pair: {result['pair']}
+Signal: {result['signal']}
+Confidence: {result['confidence']}%
 
-Entry: {best['entry']}
-SL: {best['stop_loss']}
-TP: {best['take_profit']}
+Entry: {result['entry']}
+SL: {result['stop_loss']}
+TP: {result['take_profit']}
 """
 
     send_telegram(message)
 
-    return jsonify(best)
+    return jsonify(result)
 
 
 if __name__=="__main__":
