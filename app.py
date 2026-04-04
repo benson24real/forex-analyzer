@@ -435,12 +435,44 @@ TP: {result['take_profit']}
 
 def auto_scan():
 
-    pair=get_next_pair()
+    pairs = FOREX_PAIRS + CRYPTO_PAIRS + SYNTHETIC_PAIRS
 
-    result=analyze_pair(pair)
+    results=[]
 
-    if result is None:
+    for pair in pairs:
+
+        try:
+
+            result=analyze_pair(pair)
+
+            if result:
+                results.append(result)
+
+        except:
+            continue
+
+
+    if len(results)==0:
         return
+
+
+    best=max(results,key=lambda x:x["confidence"])
+
+
+    message=f"""
+TOP SIGNAL
+
+Pair: {best['pair']}
+Signal: {best['signal']}
+Confidence: {best['confidence']}%
+
+Entry: {best['entry']}
+SL: {best['stop_loss']}
+TP: {best['take_profit']}
+"""
+
+
+    send_telegram(message)
 
     message=f"""
 AUTO SIGNAL
