@@ -24,10 +24,7 @@ FOREX_PAIRS=[
 CRYPTO_PAIRS=["BTC/USD","ETH/USD"]
 
 
-# =====================
 # TELEGRAM
-# =====================
-
 def send_telegram(message):
 
     url=f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -40,10 +37,7 @@ def send_telegram(message):
         pass
 
 
-# =====================
 # MARKET HOURS
-# =====================
-
 def forex_market_open():
 
     now=datetime.datetime.utcnow()
@@ -55,10 +49,7 @@ def forex_market_open():
     return True
 
 
-# =====================
-# INDICATORS
-# =====================
-
+# EMA
 def ema(prices,period):
 
     k=2/(period+1)
@@ -70,6 +61,7 @@ def ema(prices,period):
     return ema_val
 
 
+# MACD
 def macd(prices):
 
     ema12=ema(prices[-12:],12)
@@ -81,6 +73,7 @@ def macd(prices):
     return macd_val,signal_line
 
 
+# RSI
 def rsi(prices,period=14):
 
     gains=[]
@@ -103,6 +96,7 @@ def rsi(prices,period=14):
     return 100-(100/(1+rs))
 
 
+# ATR
 def atr(data,period=14):
 
     trs=[]
@@ -124,10 +118,7 @@ def atr(data,period=14):
     return sum(trs[-period:])/period
 
 
-# =====================
 # CANDLE PATTERNS
-# =====================
-
 def candle_pattern(data):
 
     last=data[-1]
@@ -161,10 +152,7 @@ def candle_pattern(data):
     return "none"
 
 
-# =====================
-# SMART MONEY
-# =====================
-
+# MARKET STRUCTURE
 def break_of_structure(prices):
 
     high=max(prices[-15:])
@@ -179,6 +167,7 @@ def break_of_structure(prices):
     return "none"
 
 
+# LIQUIDITY
 def liquidity_sweep(data):
 
     last=data[-1]
@@ -193,6 +182,7 @@ def liquidity_sweep(data):
     return "none"
 
 
+# ORDER BLOCK
 def order_block(data):
 
     prev=data[-2]
@@ -207,6 +197,7 @@ def order_block(data):
     return "none"
 
 
+# FAIR VALUE GAP
 def fair_value_gap(data):
 
     if len(data)<3:
@@ -224,10 +215,7 @@ def fair_value_gap(data):
     return "none"
 
 
-# =====================
 # SUPPORT RESISTANCE
-# =====================
-
 def support_resistance(prices):
 
     support=min(prices[-30:])
@@ -236,10 +224,7 @@ def support_resistance(prices):
     return support,resistance
 
 
-# =====================
 # TRADE LEVELS
-# =====================
-
 def trade_levels(price,signal):
 
     if signal=="BUY":
@@ -262,10 +247,7 @@ def trade_levels(price,signal):
     return round(entry,5),round(sl,5),round(tp1,5),round(tp2,5)
 
 
-# =====================
-# DATA
-# =====================
-
+# GET DATA
 def get_data(pair):
 
     url=f"https://api.twelvedata.com/time_series?symbol={pair}&interval=15min&outputsize=200&apikey={API_KEY}"
@@ -282,10 +264,7 @@ def get_data(pair):
     return values,closes
 
 
-# =====================
 # ANALYSIS
-# =====================
-
 def analyze_pair(pair):
 
     entry=get_data(pair)
@@ -315,7 +294,7 @@ def analyze_pair(pair):
 
     atr_val=atr(values)
 
-    if atr_val>(price*0.006):
+    if atr_val>(price*0.008):
         return None
 
 
@@ -351,13 +330,13 @@ def analyze_pair(pair):
     if price>=resistance*0.997: sell+=1
 
 
-    if buy>=9:
+    if buy>=6:
         signal="BUY"
-        confidence=int((buy/14)*100)
+        confidence=int((buy/12)*100)
 
-    elif sell>=9:
+    elif sell>=6:
         signal="SELL"
-        confidence=int((sell/14)*100)
+        confidence=int((sell/12)*100)
 
     else:
         return None
@@ -376,10 +355,7 @@ def analyze_pair(pair):
     }
 
 
-# =====================
 # SCAN
-# =====================
-
 @app.route("/scan")
 
 def scan():
@@ -427,9 +403,6 @@ Stop Loss: {best['stop_loss']}
 
 TP1: {best['tp1']}
 TP2: {best['tp2']}
-
-Close 50% at TP1
-Move SL to Breakeven
 """
 
     send_telegram(message)
@@ -437,10 +410,7 @@ Move SL to Breakeven
     return jsonify(best)
 
 
-# =====================
 # AUTO SCAN
-# =====================
-
 def auto_scan():
 
     pairs=FOREX_PAIRS+CRYPTO_PAIRS
@@ -488,7 +458,7 @@ scheduler=BackgroundScheduler()
 scheduler.add_job(
 func=auto_scan,
 trigger="interval",
-minutes=45
+minutes=10
 )
 
 scheduler.start()
