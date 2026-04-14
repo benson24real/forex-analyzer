@@ -32,7 +32,7 @@ def send_telegram(message):
     payload={"chat_id":CHAT_ID,"text":message}
 
     try:
-        requests.post(url,data=payload)
+        requests.post(url,data=payload,timeout=10)
     except:
         pass
 
@@ -118,7 +118,7 @@ def atr(data,period=14):
     return sum(trs[-period:])/period
 
 
-# CANDLE PATTERNS
+# CANDLE PATTERN
 def candle_pattern(data):
 
     last=data[-1]
@@ -152,7 +152,7 @@ def candle_pattern(data):
     return "none"
 
 
-# MARKET STRUCTURE
+# BREAK OF STRUCTURE
 def break_of_structure(prices):
 
     high=max(prices[-15:])
@@ -167,7 +167,7 @@ def break_of_structure(prices):
     return "none"
 
 
-# LIQUIDITY
+# LIQUIDITY SWEEP
 def liquidity_sweep(data):
 
     last=data[-1]
@@ -250,9 +250,14 @@ def trade_levels(price,signal):
 # GET DATA
 def get_data(pair):
 
-    url=f"https://api.twelvedata.com/time_series?symbol={pair}&interval=15min&outputsize=200&apikey={API_KEY}"
+    symbol=pair.replace("/","")
 
-    data=requests.get(url).json()
+    url=f"https://api.twelvedata.com/time_series?symbol={symbol}&interval=15min&outputsize=200&apikey={API_KEY}"
+
+    try:
+        data=requests.get(url,timeout=10).json()
+    except:
+        return None
 
     if "values" not in data:
         return None
@@ -294,9 +299,6 @@ def analyze_pair(pair):
 
     atr_val=atr(values)
 
-    if atr_val>(price*0.008):
-        return None
-
 
     buy=0
     sell=0
@@ -305,8 +307,8 @@ def analyze_pair(pair):
     if trend=="bullish": buy+=2
     else: sell+=2
 
-    if rsi_val<35: buy+=1
-    if rsi_val>65: sell+=1
+    if rsi_val<40: buy+=1
+    if rsi_val>60: sell+=1
 
     if macd_val>macd_sig: buy+=1
     else: sell+=1
