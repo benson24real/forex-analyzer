@@ -1,4 +1,4 @@
- from flask import Flask, jsonify
+from flask import Flask, jsonify
 import requests
 import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
