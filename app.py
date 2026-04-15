@@ -332,13 +332,13 @@ def analyze_pair(pair):
     if price>=resistance*0.997: sell+=1
 
 
-    if buy>=6:
+    if buy>=4:
         signal="BUY"
-        confidence=int((buy/12)*100)
+        confidence=int((buy/8)*100)
 
-    elif sell>=6:
+    elif sell>=4:
         signal="SELL"
-        confidence=int((sell/12)*100)
+        confidence=int((sell/8)*100)
 
     else:
         return None
