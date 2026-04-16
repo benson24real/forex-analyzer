@@ -1,3 +1,4 @@
+```python
 from flask import Flask, jsonify
 import requests
 import datetime
@@ -10,15 +11,16 @@ def home():
     return "SMART MONEY FOREX ANALYZER RUNNING"
 
 
-API_KEY="52489f2772614f87957488969609b2e1"
-TELEGRAM_TOKEN="8764783714:AAF0KdadTOWBcyMW_KpSdZfcWwrqiShELlw"
-CHAT_ID="928499759"
+API_KEY="YOUR_API_KEY"
+TELEGRAM_TOKEN="YOUR_TELEGRAM_TOKEN"
+CHAT_ID="YOUR_CHAT_ID"
 
 
 FOREX_PAIRS=[
 "EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD",
 "NZD/USD","EUR/GBP","EUR/JPY","GBP/JPY","EUR/AUD",
-"GBP/AUD","AUD/JPY","XAU/USD","XAG/USD"
+"GBP/AUD","AUD/JPY","XAU/USD","XAG/USD",
+"USD/CHF","EUR/CHF","GBP/CHF","AUD/CAD","EUR/NZD"
 ]
 
 CRYPTO_PAIRS=["BTC/USD","ETH/USD"]
@@ -259,6 +261,9 @@ def get_data(pair):
     except:
         return None
 
+    if "code" in data:
+        return None
+
     if "values" not in data:
         return None
 
@@ -286,6 +291,11 @@ def analyze_pair(pair):
 
     trend="bullish" if ema50>ema200 else "bearish"
 
+    # TREND STRENGTH FILTER
+    trend_strength=abs(ema50-ema200)/price
+    if trend_strength<0.0008:
+        return None
+
     rsi_val=rsi(closes)
     macd_val,macd_sig=macd(closes)
 
@@ -299,16 +309,21 @@ def analyze_pair(pair):
 
     atr_val=atr(values)
 
+    # SMALL CANDLE FILTER
+    last_candle=values[-1]
+    range_size=float(last_candle["high"])-float(last_candle["low"])
+
+    if range_size < price*0.0004:
+        return None
 
     buy=0
     sell=0
 
-
     if trend=="bullish": buy+=2
     else: sell+=2
 
-    if rsi_val<40: buy+=1
-    if rsi_val>60: sell+=1
+    if rsi_val<45: buy+=1
+    if rsi_val>55: sell+=1
 
     if macd_val>macd_sig: buy+=1
     else: sell+=1
@@ -331,18 +346,16 @@ def analyze_pair(pair):
     if price<=support*1.003: buy+=1
     if price>=resistance*0.997: sell+=1
 
-
-    if buy>=4:
+    if buy>=3:
         signal="BUY"
         confidence=int((buy/8)*100)
 
-    elif sell>=4:
+    elif sell>=3:
         signal="SELL"
         confidence=int((sell/8)*100)
 
     else:
         return None
-
 
     entry_price,sl,tp1,tp2=trade_levels(price,signal)
 
@@ -359,7 +372,6 @@ def analyze_pair(pair):
 
 # SCAN
 @app.route("/scan")
-
 def scan():
 
     pairs=FOREX_PAIRS+CRYPTO_PAIRS
@@ -380,20 +392,12 @@ def scan():
         except:
             continue
 
-
     if len(results)==0:
-
-        return jsonify({
-        "signal":"WAIT",
-        "message":"No strong setup"
-        })
-
+        return jsonify({"signal":"WAIT","message":"No strong setup"})
 
     best=max(results,key=lambda x:x["confidence"])
 
-
     message=f"""
-
 SMART MONEY SIGNAL
 
 Pair: {best['pair']}
@@ -416,7 +420,6 @@ TP2: {best['tp2']}
 def auto_scan():
 
     pairs=FOREX_PAIRS+CRYPTO_PAIRS
-
     results=[]
 
     for pair in pairs:
@@ -433,12 +436,9 @@ def auto_scan():
     if len(results)==0:
         return
 
-
     best=max(results,key=lambda x:x["confidence"])
 
-
     message=f"""
-
 AUTO SMART SIGNAL
 
 Pair: {best['pair']}
@@ -468,3 +468,4 @@ scheduler.start()
 
 if __name__=="__main__":
     app.run(host="0.0.0.0",port=10000)
+```
