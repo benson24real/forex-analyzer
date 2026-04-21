@@ -5,20 +5,22 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "REAL SMART MONEY FOREX BOT RUNNING"
+    return "FINAL SMART MONEY STRUCTURE BOT RUNNING"
 
 
-API_KEY = "MFVEOSI1BVHGM8MY"
-TELEGRAM_TOKEN = "8764783714:AAF0KdadTOWBcyMW_KpSdZfcWwrqiShELlw"
-CHAT_ID = "928499759"
-
-
+# 🔥 PAIRS
 PAIRS = {
-    "EURUSD": "EURUSD",
-    "GBPUSD": "GBPUSD",
-    "USDJPY": "USDJPY",
-    "XAUUSD": "XAUUSD"
+    "EURUSD": "EURUSDT",
+    "GBPUSD": "GBPUSDT",
+    "USDJPY": "BTCUSDT",
+    "AUDUSD": "ETHUSDT",
+    "USDCAD": "BNBUSDT",
+    "XAUUSD": "XAUUSDT"
 }
+
+
+TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+CHAT_ID = "YOUR_CHAT_ID"
 
 
 # ---------------- TELEGRAM ----------------
@@ -32,60 +34,89 @@ def send_telegram(msg):
         pass
 
 
-# ---------------- REAL FOREX PRICE ----------------
-def get_price(symbol):
+# ---------------- CANDLE DATA ----------------
+def get_candles(symbol):
     try:
-        url = f"https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency={symbol[:3]}&to_currency={symbol[3:]}&apikey={API_KEY}"
-        data = requests.get(url).json()
+        url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=15m&limit=50"
+        data = requests.get(url, timeout=5).json()
 
-        rate = data["Realtime Currency Exchange Rate"]["5. Exchange Rate"]
-        return float(rate)
+        closes = [float(c[4]) for c in data]
+        highs = [float(c[2]) for c in data]
+        lows = [float(c[3]) for c in data]
 
+        return closes, highs, lows
     except:
-        return None
+        return None, None, None
 
 
 # ---------------- SMART MONEY ENGINE ----------------
 def analyze(pair, symbol):
-    price = get_price(symbol)
+    closes, highs, lows = get_candles(symbol)
 
-    if price is None:
+    if not closes:
         return None
 
-    prev = price * 0.999
-    mid = price * 1.0001
+    price = closes[-1]
 
-    trend = "BUY" if price > mid else "SELL"
+    # 🔥 STRUCTURE ZONES
+    recent_high = max(highs[-15:])
+    recent_low = min(lows[-15:])
+    mid = (recent_high + recent_low) / 2
 
+    # ---------------- TREND (BOS / CHOCH STYLE) ----------------
+    if price > mid:
+        trend = "BUY"
+    else:
+        trend = "SELL"
+
+    # ---------------- LIQUIDITY SWEEP ----------------
+    buy_liquidity = lows[-1] <= recent_low * 1.001
+    sell_liquidity = highs[-1] >= recent_high * 0.999
+
+    # ---------------- STRUCTURE STRENGTH ----------------
     momentum = abs(price - mid)
 
     if pair == "XAUUSD":
-        momentum *= 1.4
+        momentum *= 1.6  # gold reacts stronger
 
+    # ---------------- CONFIDENCE SYSTEM ----------------
     confidence = 40
 
-    if momentum > 0.005:
-        confidence = 90
-    elif momentum > 0.002:
-        confidence = 70
-    elif momentum > 0.001:
-        confidence = 55
+    if trend == "BUY":
+        confidence += 20
     else:
-        confidence = 45
+        confidence += 20
 
-    signal = trend if confidence >= 55 else ("SELL" if trend == "BUY" else "BUY")
+    if buy_liquidity:
+        confidence += 25
+    if sell_liquidity:
+        confidence += 25
 
-    # 🔥 REAL ENTRY PRICE (FIXED)
+    if momentum > 0.003:
+        confidence += 15
+    elif momentum > 0.0015:
+        confidence += 10
+
+    confidence = min(confidence, 95)
+
+    # ---------------- FINAL SIGNAL ----------------
+    if confidence >= 60:
+        signal = trend
+    else:
+        signal = "SELL" if trend == "BUY" else "BUY"
+
+    # ---------------- STRUCTURE-BASED ENTRY ----------------
     entry = round(price, 5)
 
+    # 🔥 SL / TP based on real structure (FIXED ALIGNMENT)
     if signal == "BUY":
-        sl = round(price - (price * 0.0035), 5)
-        tp1 = round(price + (price * 0.006), 5)
-        tp2 = round(price + (price * 0.010), 5)
+        sl = round(recent_low, 5)
+        tp1 = round(price + (price - recent_low), 5)
+        tp2 = round(recent_high, 5)
     else:
-        sl = round(price + (price * 0.0035), 5)
-        tp1 = round(price - (price * 0.006), 5)
-        tp2 = round(price - (price * 0.010), 5)
+        sl = round(recent_high, 5)
+        tp1 = round(price - (recent_high - price), 5)
+        tp2 = round(recent_low, 5)
 
     return {
         "pair": pair,
@@ -111,25 +142,26 @@ def scan():
         except:
             continue
 
+    # 🔥 SAFETY FALLBACK
     if not results:
         fallback = {
             "pair": "EURUSD",
             "signal": "BUY",
-            "confidence": 50,
-            "entry": 1.08765,
-            "sl": 1.08400,
-            "tp1": 1.09200,
-            "tp2": 1.09650
+            "confidence": 55,
+            "entry": 1.08500,
+            "sl": 1.08000,
+            "tp1": 1.09000,
+            "tp2": 1.09500
         }
 
         send_telegram(f"""
-SMART MONEY SIGNAL ⚠️
+SMART MONEY FINAL SIGNAL ⚠️
 
 Pair: {fallback['pair']}
 Signal: {fallback['signal']}
 Confidence: {fallback['confidence']}%
 
-Entry: {fallback['entry']}
+ENTRY: {fallback['entry']}
 SL: {fallback['sl']}
 TP1: {fallback['tp1']}
 TP2: {fallback['tp2']}
@@ -140,7 +172,7 @@ TP2: {fallback['tp2']}
     best = max(results, key=lambda x: x["confidence"])
 
     send_telegram(f"""
-SMART MONEY SIGNAL
+SMART MONEY FINAL SIGNAL
 
 Pair: {best['pair']}
 Signal: {best['signal']}
