@@ -5,18 +5,16 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "FOREX + GOLD SIGNAL BOT RUNNING"
+    return "CLEAN FOREX + GOLD SIGNAL BOT RUNNING"
 
 
-# 🔥 FOREX + GOLD PAIRS
+# 🔥 FOREX + GOLD
 PAIRS = {
     "EURUSD": "EURUSDT",
     "GBPUSD": "GBPUSDT",
     "USDJPY": "BTCUSDT",
     "AUDUSD": "ETHUSDT",
     "USDCAD": "BNBUSDT",
-
-    # 🔥 GOLD ADDED
     "XAUUSD": "XAUUSDT"
 }
 
@@ -46,28 +44,23 @@ def get_price(symbol):
         return None
 
 
-# ---------------- IMPROVED ANALYSIS ----------------
+# ---------------- ANALYSIS ----------------
 def analyze(pair, symbol):
     price = get_price(symbol)
 
-    # 🔥 SAFE FALLBACK
     if price is None:
         price = 1.1000
 
     prev = price * 0.999
     prev2 = price * 1.001
 
-    # trend direction
     trend = "BUY" if price > prev else "SELL"
 
-    # momentum
     momentum = abs(price - prev2)
 
-    # GOLD behaves stronger → boost sensitivity
     if pair == "XAUUSD":
         momentum *= 1.5
 
-    # confidence logic
     if momentum > 0.005:
         confidence = 90
     elif momentum > 0.002:
@@ -77,17 +70,28 @@ def analyze(pair, symbol):
     else:
         confidence = 25
 
-    # final signal logic
-    if trend == "BUY" and confidence >= 40:
-        signal = "BUY"
+    signal = "BUY" if trend == "BUY" and confidence >= 40 else "SELL"
+
+    # 🔥 FIX: CLEAN PRICE LEVELS (IMPORTANT)
+    entry = round(price, 5)
+
+    if signal == "BUY":
+        sl = round(price - (price * 0.004), 5)
+        tp1 = round(price + (price * 0.006), 5)
+        tp2 = round(price + (price * 0.012), 5)
     else:
-        signal = "SELL"
+        sl = round(price + (price * 0.004), 5)
+        tp1 = round(price - (price * 0.006), 5)
+        tp2 = round(price - (price * 0.012), 5)
 
     return {
         "pair": pair,
         "signal": signal,
         "confidence": confidence,
-        "price": round(price, 5)
+        "entry": entry,
+        "sl": sl,
+        "tp1": tp1,
+        "tp2": tp2
     }
 
 
@@ -99,45 +103,56 @@ def scan():
     for pair, symbol in PAIRS.items():
         try:
             r = analyze(pair, symbol)
-            if r:
-                results.append(r)
+            results.append(r)
         except:
             continue
 
-    # 🔥 ALWAYS RETURN DATA (NO CRASH)
     if not results:
         fallback = {
             "pair": "XAUUSD",
             "signal": "BUY",
             "confidence": 50,
-            "price": 2000.0
+            "entry": 2000.00,
+            "sl": 1992.00,
+            "tp1": 2012.00,
+            "tp2": 2025.00
         }
 
         send_telegram(f"""
-FALLBACK SIGNAL ⚠️
+⚠️ FALLBACK SIGNAL
 
 Pair: {fallback['pair']}
 Signal: {fallback['signal']}
 Confidence: {fallback['confidence']}%
-Price: {fallback['price']}
+
+Entry: {fallback['entry']}
+SL: {fallback['sl']}
+TP1: {fallback['tp1']}
+TP2: {fallback['tp2']}
 """)
 
         return jsonify(fallback)
 
     best = max(results, key=lambda x: x["confidence"])
 
-    send_telegram(f"""
+    # 🔥 CLEAN TELEGRAM FORMAT (NO CUT NUMBERS)
+    message = f"""
 FOREX + GOLD SIGNAL
 
 Pair: {best['pair']}
 Signal: {best['signal']}
 Confidence: {best['confidence']}%
-Price: {best['price']}
-""")
+
+ENTRY: {best['entry']}
+STOP LOSS: {best['sl']}
+TAKE PROFIT 1: {best['tp1']}
+TAKE PROFIT 2: {best['tp2']}
+"""
+
+    send_telegram(message)
 
     return jsonify(best)
 
 
-# ---------------- RUN ----------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
