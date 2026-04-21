@@ -26,9 +26,7 @@ CRYPTO_PAIRS=["BTC/USD","ETH/USD"]
 
 # TELEGRAM
 def send_telegram(message):
-
     url=f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-
     payload={"chat_id":CHAT_ID,"text":message}
 
     try:
@@ -39,7 +37,6 @@ def send_telegram(message):
 
 # MARKET HOURS
 def forex_market_open():
-
     now=datetime.datetime.utcnow()
     day=now.weekday()
 
@@ -51,7 +48,6 @@ def forex_market_open():
 
 # EMA
 def ema(prices,period):
-
     k=2/(period+1)
     ema_val=prices[0]
 
@@ -63,7 +59,6 @@ def ema(prices,period):
 
 # MACD
 def macd(prices):
-
     ema12=ema(prices[-12:],12)
     ema26=ema(prices[-26:],26)
 
@@ -75,12 +70,10 @@ def macd(prices):
 
 # RSI
 def rsi(prices,period=14):
-
     gains=[]
     losses=[]
 
     for i in range(1,period):
-
         change=prices[-i]-prices[-i-1]
 
         if change>0:
@@ -92,17 +85,14 @@ def rsi(prices,period=14):
     avg_loss=sum(losses)/period if losses else 0.001
 
     rs=avg_gain/avg_loss
-
     return 100-(100/(1+rs))
 
 
 # ATR
 def atr(data,period=14):
-
     trs=[]
 
     for i in range(1,len(data)):
-
         high=float(data[i]["high"])
         low=float(data[i]["low"])
         prev_close=float(data[i-1]["close"])
@@ -112,15 +102,13 @@ def atr(data,period=14):
             abs(high-prev_close),
             abs(low-prev_close)
         )
-
         trs.append(tr)
 
     return sum(trs[-period:])/period
 
 
-# CANDLE PATTERNS
+# PATTERNS
 def candle_pattern(data):
-
     last=data[-1]
     prev=data[-2]
 
@@ -152,9 +140,8 @@ def candle_pattern(data):
     return "none"
 
 
-# MARKET STRUCTURE
+# STRUCTURE
 def break_of_structure(prices):
-
     high=max(prices[-15:])
     low=min(prices[-15:])
 
@@ -169,7 +156,6 @@ def break_of_structure(prices):
 
 # LIQUIDITY
 def liquidity_sweep(data):
-
     last=data[-1]
     prev=data[-2]
 
@@ -184,7 +170,6 @@ def liquidity_sweep(data):
 
 # ORDER BLOCK
 def order_block(data):
-
     prev=data[-2]
     curr=data[-1]
 
@@ -197,9 +182,8 @@ def order_block(data):
     return "none"
 
 
-# FAIR VALUE GAP
+# FVG
 def fair_value_gap(data):
-
     if len(data)<3:
         return "none"
 
@@ -215,27 +199,22 @@ def fair_value_gap(data):
     return "none"
 
 
-# SUPPORT RESISTANCE
+# SUPPORT/RESISTANCE
 def support_resistance(prices):
-
     support=min(prices[-30:])
     resistance=max(prices[-30:])
-
     return support,resistance
 
 
 # TRADE LEVELS
 def trade_levels(price,signal):
-
     if signal=="BUY":
-
         entry=price
         sl=price-(price*0.004)
         tp1=price+(price*0.006)
         tp2=price+(price*0.012)
 
     elif signal=="SELL":
-
         entry=price
         sl=price+(price*0.004)
         tp1=price-(price*0.006)
@@ -249,31 +228,26 @@ def trade_levels(price,signal):
 
 # GET DATA
 def get_data(pair):
-
     url=f"https://api.twelvedata.com/time_series?symbol={pair}&interval=15min&outputsize=200&apikey={API_KEY}"
-
     data=requests.get(url).json()
 
     if "values" not in data:
         return None
 
     values=data["values"][::-1]
-
     closes=[float(v["close"]) for v in values]
 
     return values,closes
 
 
-# ANALYSIS
+# ANALYSIS (UPDATED)
 def analyze_pair(pair):
-
     entry=get_data(pair)
 
     if entry is None:
         return None
 
     values,closes=entry
-
     price=closes[-1]
 
     ema50=ema(closes[-50:],50)
@@ -292,15 +266,8 @@ def analyze_pair(pair):
 
     support,resistance=support_resistance(closes)
 
-    atr_val=atr(values)
-
-    if atr_val>(price*0.008):
-        return None
-
-
     buy=0
     sell=0
-
 
     if trend=="bullish": buy+=2
     else: sell+=2
@@ -329,18 +296,18 @@ def analyze_pair(pair):
     if price<=support*1.003: buy+=1
     if price>=resistance*0.997: sell+=1
 
+    # 🔥 ALWAYS PICK SIGNAL
+    if buy > sell:
+        signal = "BUY"
+        confidence = int((buy / (buy + sell)) * 100) if (buy + sell) > 0 else 50
 
-    if buy>=6:
-        signal="BUY"
-        confidence=int((buy/12)*100)
-
-    elif sell>=6:
-        signal="SELL"
-        confidence=int((sell/12)*100)
+    elif sell > buy:
+        signal = "SELL"
+        confidence = int((sell / (buy + sell)) * 100) if (buy + sell) > 0 else 50
 
     else:
-        return None
-
+        signal = "NEUTRAL"
+        confidence = 50
 
     entry_price,sl,tp1,tp2=trade_levels(price,signal)
 
@@ -357,41 +324,27 @@ def analyze_pair(pair):
 
 # SCAN
 @app.route("/scan")
-
 def scan():
-
     pairs=FOREX_PAIRS+CRYPTO_PAIRS
-
     results=[]
 
     for pair in pairs:
-
         if pair in FOREX_PAIRS and not forex_market_open():
             continue
 
         try:
             r=analyze_pair(pair)
-
             if r:
                 results.append(r)
-
         except:
             continue
 
-
     if len(results)==0:
-
-        return jsonify({
-        "signal":"WAIT",
-        "message":"No strong setup"
-        })
-
+        return jsonify({"signal":"WAIT","message":"No data"})
 
     best=max(results,key=lambda x:x["confidence"])
 
-
     message=f"""
-
 SMART MONEY SIGNAL
 
 Pair: {best['pair']}
@@ -406,37 +359,28 @@ TP2: {best['tp2']}
 """
 
     send_telegram(message)
-
     return jsonify(best)
 
 
 # AUTO SCAN
 def auto_scan():
-
     pairs=FOREX_PAIRS+CRYPTO_PAIRS
-
     results=[]
 
     for pair in pairs:
-
         try:
             r=analyze_pair(pair)
-
             if r:
                 results.append(r)
-
         except:
             continue
 
     if len(results)==0:
         return
 
-
     best=max(results,key=lambda x:x["confidence"])
 
-
     message=f"""
-
 AUTO SMART SIGNAL
 
 Pair: {best['pair']}
@@ -454,13 +398,7 @@ TP2: {best['tp2']}
 
 
 scheduler=BackgroundScheduler()
-
-scheduler.add_job(
-func=auto_scan,
-trigger="interval",
-minutes=10
-)
-
+scheduler.add_job(func=auto_scan, trigger="interval", minutes=10)
 scheduler.start()
 
 
