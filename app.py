@@ -15,15 +15,17 @@ TELEGRAM_TOKEN = "8764783714:AAF0KdadTOWBcyMW_KpSdZfcWwrqiShELlw"
 CHAT_ID = "928499759"
 
 
+# ✅ FIXED SYMBOL FORMAT (NO SLASHES)
 FOREX_PAIRS = [
-    "EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD",
-    "NZD/USD","EUR/GBP","EUR/JPY","GBP/JPY","EUR/AUD",
-    "GBP/AUD","AUD/JPY","XAU/USD","XAG/USD"
+    "EURUSD","GBPUSD","USDJPY","AUDUSD","USDCAD",
+    "NZDUSD","EURGBP","EURJPY","GBPJPY","EURAUD",
+    "GBPAUD","AUDJPY","XAUUSD","XAGUSD"
 ]
 
-CRYPTO_PAIRS = ["BTC/USD","ETH/USD"]
+CRYPTO_PAIRS = ["BTCUSD","ETHUSD"]
 
 
+# TELEGRAM
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message}
@@ -34,6 +36,7 @@ def send_telegram(message):
         print("Telegram Error:", e)
 
 
+# EMA
 def ema(prices, period):
     k = 2/(period+1)
     ema_val = prices[0]
@@ -44,6 +47,7 @@ def ema(prices, period):
     return ema_val
 
 
+# MACD
 def macd(prices):
     ema12 = ema(prices[-12:], 12)
     ema26 = ema(prices[-26:], 26)
@@ -52,6 +56,7 @@ def macd(prices):
     return macd_val, signal_line
 
 
+# RSI
 def rsi(prices, period=14):
     gains = []
     losses = []
@@ -71,6 +76,7 @@ def rsi(prices, period=14):
     return 100 - (100/(1+rs))
 
 
+# TRADE LEVELS
 def trade_levels(price, signal):
     if signal == "BUY":
         entry = price
@@ -90,168 +96,14 @@ def trade_levels(price, signal):
     return round(entry,5), round(sl,5), round(tp1,5), round(tp2,5)
 
 
+# ✅ IMPROVED DATA FETCH
 def get_data(pair):
-    url = f"https://api.twelvedata.com/time_series?symbol={pair}&interval=15min&outputsize=200&apikey={API_KEY}"
-    data = requests.get(url).json()
+    url = f"https://api.twelvedata.com/time_series?symbol={pair}&interval=15min&outputsize=100&apikey={API_KEY}"
 
-    if "values" not in data:
-        return None
-
-    values = data["values"][::-1]
-    closes = [float(v["close"]) for v in values]
-
-    return values, closes
-
-
-def analyze_pair(pair):
-    entry = get_data(pair)
-
-    if entry is None:
-        return None
-
-    values, closes = entry
-    price = closes[-1]
-
-    ema50 = ema(closes[-50:], 50)
-    ema200 = ema(closes[-200:], 200)
-
-    trend = "bullish" if ema50 > ema200 else "bearish"
-
-    rsi_val = rsi(closes)
-    macd_val, macd_sig = macd(closes)
-
-    buy = 0
-    sell = 0
-
-    if trend == "bullish":
-        buy += 2
-    else:
-        sell += 2
-
-    if rsi_val < 35:
-        buy += 1
-    if rsi_val > 65:
-        sell += 1
-
-    if macd_val > macd_sig:
-        buy += 1
-    else:
-        sell += 1
-
-    if buy > sell:
-        signal = "BUY"
-        confidence = int((buy/(buy+sell))*100) if (buy+sell)>0 else 50
-    elif sell > buy:
-        signal = "SELL"
-        confidence = int((sell/(buy+sell))*100) if (buy+sell)>0 else 50
-    else:
-        signal = "BUY"
-        confidence = 50
-
-    entry_price, sl, tp1, tp2 = trade_levels(price, signal)
-
-    return {
-        "pair": pair,
-        "signal": signal,
-        "confidence": confidence,
-        "entry": entry_price,
-        "stop_loss": sl,
-        "tp1": tp1,
-        "tp2": tp2
-    }
-
-
-@app.route("/scan")
-def scan():
-    print("SCAN TRIGGERED")
-
-    pairs = FOREX_PAIRS + CRYPTO_PAIRS
-    results = []
-
-    for pair in pairs:
-        try:
-            r = analyze_pair(pair)
-            if r:
-                results.append(r)
-        except Exception as e:
-            print(f"Error on {pair}: {e}")
-
-    if len(results) > 0:
-        best = max(results, key=lambda x: x["confidence"])
-
-        message = f"""
-SMART MONEY SIGNAL
-
-Pair: {best['pair']}
-Signal: {best['signal']}
-Confidence: {best['confidence']}%
-
-Entry: {best['entry']}
-Stop Loss: {best['stop_loss']}
-
-TP1: {best['tp1']}
-TP2: {best['tp2']}
-"""
-
-        send_telegram(message)
-        return jsonify(best)
-
-    # FORCE SIGNAL
-    for pair in pairs:
-        try:
-            entry = get_data(pair)
-            if entry:
-                values, closes = entry
-                price = closes[-1]
-
-                signal = "BUY" if closes[-1] > closes[-2] else "SELL"
-
-                entry_price, sl, tp1, tp2 = trade_levels(price, signal)
-
-                forced = {
-                    "pair": pair,
-                    "signal": signal,
-                    "confidence": 50,
-                    "entry": entry_price,
-                    "stop_loss": sl,
-                    "tp1": tp1,
-                    "tp2": tp2
-                }
-
-                message = f"""
-FORCED SIGNAL
-
-Pair: {forced['pair']}
-Signal: {forced['signal']}
-Confidence: {forced['confidence']}%
-
-Entry: {forced['entry']}
-Stop Loss: {forced['stop_loss']}
-
-TP1: {forced['tp1']}
-TP2: {forced['tp2']}
-"""
-
-                send_telegram(message)
-                return jsonify(forced)
-
-        except:
-            continue
-
-    return jsonify({"error": "No market data available"})
-
-
-def auto_scan():
     try:
-        scan()
-    except Exception as e:
-        print("Auto scan error:", e)
+        response = requests.get(url)
+        data = response.json()
 
+        print(f"{pair} response:", data)  # 🔍 DEBUG
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(func=auto_scan, trigger="interval", minutes=10)
-scheduler.start()
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+        if "values
