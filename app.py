@@ -14,7 +14,6 @@ API_KEY="52489f2772614f87957488969609b2e1"
 TELEGRAM_TOKEN="8764783714:AAF0KdadTOWBcyMW_KpSdZfcWwrqiShELlw"
 CHAT_ID="928499759"
 
-
 FOREX_PAIRS=[
 "EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD",
 "NZD/USD","EUR/GBP","EUR/JPY","GBP/JPY","EUR/AUD",
@@ -31,19 +30,8 @@ def send_telegram(message):
 
     try:
         requests.post(url,data=payload)
-    except:
-        pass
-
-
-# MARKET HOURS
-def forex_market_open():
-    now=datetime.datetime.utcnow()
-    day=now.weekday()
-
-    if day in [5,6]:
-        return False
-
-    return True
+    except Exception as e:
+        print("Telegram Error:", e)
 
 
 # EMA
@@ -88,124 +76,6 @@ def rsi(prices,period=14):
     return 100-(100/(1+rs))
 
 
-# ATR
-def atr(data,period=14):
-    trs=[]
-
-    for i in range(1,len(data)):
-        high=float(data[i]["high"])
-        low=float(data[i]["low"])
-        prev_close=float(data[i-1]["close"])
-
-        tr=max(
-            high-low,
-            abs(high-prev_close),
-            abs(low-prev_close)
-        )
-        trs.append(tr)
-
-    return sum(trs[-period:])/period
-
-
-# PATTERNS
-def candle_pattern(data):
-    last=data[-1]
-    prev=data[-2]
-
-    o1=float(prev["open"])
-    c1=float(prev["close"])
-
-    o2=float(last["open"])
-    c2=float(last["close"])
-
-    high=float(last["high"])
-    low=float(last["low"])
-
-    body=abs(c2-o2)
-    upper=high-max(c2,o2)
-    lower=min(c2,o2)-low
-
-    if c2>o2 and c1<o1 and c2>o1 and o2<c1:
-        return "bullish_engulfing"
-
-    if c2<o2 and c1>o1 and o2>c1 and c2<o1:
-        return "bearish_engulfing"
-
-    if lower>body*2 and upper<body:
-        return "hammer"
-
-    if upper>body*2 and lower<body:
-        return "shooting_star"
-
-    return "none"
-
-
-# STRUCTURE
-def break_of_structure(prices):
-    high=max(prices[-15:])
-    low=min(prices[-15:])
-
-    if prices[-1]>high:
-        return "bullish"
-
-    if prices[-1]<low:
-        return "bearish"
-
-    return "none"
-
-
-# LIQUIDITY
-def liquidity_sweep(data):
-    last=data[-1]
-    prev=data[-2]
-
-    if float(last["high"])>float(prev["high"]):
-        return "buy_liquidity"
-
-    if float(last["low"])<float(prev["low"]):
-        return "sell_liquidity"
-
-    return "none"
-
-
-# ORDER BLOCK
-def order_block(data):
-    prev=data[-2]
-    curr=data[-1]
-
-    if float(prev["close"])<float(prev["open"]) and float(curr["close"])>float(curr["open"]):
-        return "bullish"
-
-    if float(prev["close"])>float(prev["open"]) and float(curr["close"])<float(curr["open"]):
-        return "bearish"
-
-    return "none"
-
-
-# FVG
-def fair_value_gap(data):
-    if len(data)<3:
-        return "none"
-
-    c1=data[-3]
-    c3=data[-1]
-
-    if float(c3["low"])>float(c1["high"]):
-        return "bullish"
-
-    if float(c3["high"])<float(c1["low"]):
-        return "bearish"
-
-    return "none"
-
-
-# SUPPORT/RESISTANCE
-def support_resistance(prices):
-    support=min(prices[-30:])
-    resistance=max(prices[-30:])
-    return support,resistance
-
-
 # TRADE LEVELS
 def trade_levels(price,signal):
     if signal=="BUY":
@@ -240,7 +110,7 @@ def get_data(pair):
     return values,closes
 
 
-# ANALYSIS (UPDATED)
+# ANALYSIS (NO THRESHOLD)
 def analyze_pair(pair):
     entry=get_data(pair)
 
@@ -258,14 +128,6 @@ def analyze_pair(pair):
     rsi_val=rsi(closes)
     macd_val,macd_sig=macd(closes)
 
-    bos=break_of_structure(closes)
-    liquidity=liquidity_sweep(values)
-    ob=order_block(values)
-    fvg=fair_value_gap(values)
-    pattern=candle_pattern(values)
-
-    support,resistance=support_resistance(closes)
-
     buy=0
     sell=0
 
@@ -278,35 +140,17 @@ def analyze_pair(pair):
     if macd_val>macd_sig: buy+=1
     else: sell+=1
 
-    if bos=="bullish": buy+=1
-    if bos=="bearish": sell+=1
-
-    if liquidity=="sell_liquidity": buy+=2
-    if liquidity=="buy_liquidity": sell+=2
-
-    if ob=="bullish": buy+=1
-    if ob=="bearish": sell+=1
-
-    if fvg=="bullish": buy+=1
-    if fvg=="bearish": sell+=1
-
-    if pattern in ["bullish_engulfing","hammer"]: buy+=2
-    if pattern in ["bearish_engulfing","shooting_star"]: sell+=2
-
-    if price<=support*1.003: buy+=1
-    if price>=resistance*0.997: sell+=1
-
-    # 🔥 ALWAYS PICK SIGNAL
+    # 🔥 ALWAYS DECIDE
     if buy > sell:
         signal = "BUY"
-        confidence = int((buy / (buy + sell)) * 100) if (buy + sell) > 0 else 50
+        confidence = int((buy/(buy+sell))*100) if (buy+sell)>0 else 50
 
     elif sell > buy:
         signal = "SELL"
-        confidence = int((sell / (buy + sell)) * 100) if (buy + sell) > 0 else 50
+        confidence = int((sell/(buy+sell))*100) if (buy+sell)>0 else 50
 
     else:
-        signal = "NEUTRAL"
+        signal = "BUY"
         confidence = 50
 
     entry_price,sl,tp1,tp2=trade_levels(price,signal)
@@ -322,85 +166,15 @@ def analyze_pair(pair):
     }
 
 
-# SCAN
+# 🔥 SCAN (ALWAYS RETURNS SIGNAL)
 @app.route("/scan")
 def scan():
-    pairs=FOREX_PAIRS+CRYPTO_PAIRS
-    results=[]
+    print("SCAN TRIGGERED")
 
-    for pair in pairs:
-        if pair in FOREX_PAIRS and not forex_market_open():
-            continue
-
-        try:
-            r=analyze_pair(pair)
-            if r:
-                results.append(r)
-        except:
-            continue
-
-    if len(results)==0:
-        return jsonify({"signal":"WAIT","message":"No data"})
-
-    best=max(results,key=lambda x:x["confidence"])
-
-    message=f"""
-SMART MONEY SIGNAL
-
-Pair: {best['pair']}
-Signal: {best['signal']}
-Confidence: {best['confidence']}%
-
-Entry: {best['entry']}
-Stop Loss: {best['stop_loss']}
-
-TP1: {best['tp1']}
-TP2: {best['tp2']}
-"""
-
-    send_telegram(message)
-    return jsonify(best)
-
-
-# AUTO SCAN
-def auto_scan():
-    pairs=FOREX_PAIRS+CRYPTO_PAIRS
-    results=[]
+    pairs = FOREX_PAIRS + CRYPTO_PAIRS
+    results = []
 
     for pair in pairs:
         try:
-            r=analyze_pair(pair)
-            if r:
-                results.append(r)
-        except:
-            continue
-
-    if len(results)==0:
-        return
-
-    best=max(results,key=lambda x:x["confidence"])
-
-    message=f"""
-AUTO SMART SIGNAL
-
-Pair: {best['pair']}
-Signal: {best['signal']}
-Confidence: {best['confidence']}%
-
-Entry: {best['entry']}
-Stop Loss: {best['stop_loss']}
-
-TP1: {best['tp1']}
-TP2: {best['tp2']}
-"""
-
-    send_telegram(message)
-
-
-scheduler=BackgroundScheduler()
-scheduler.add_job(func=auto_scan, trigger="interval", minutes=10)
-scheduler.start()
-
-
-if __name__=="__main__":
-    app.run(host="0.0.0.0",port=10000)
+            r = analyze_pair(pair)
+            if
