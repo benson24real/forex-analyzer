@@ -177,6 +177,7 @@ def analyze_pair(pair):
 # SCAN
 @app.route("/scan")
 def scan():
+    print("SCAN TRIGGERED")
     pairs = FOREX_PAIRS + CRYPTO_PAIRS
     results = []
 
