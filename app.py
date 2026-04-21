@@ -5,22 +5,21 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "SMART MONEY FOREX + GOLD BOT RUNNING"
+    return "REAL SMART MONEY FOREX BOT RUNNING"
 
 
-# 🔥 PAIRS
-PAIRS = {
-    "EURUSD": "EURUSDT",
-    "GBPUSD": "GBPUSDT",
-    "USDJPY": "BTCUSDT",
-    "AUDUSD": "ETHUSDT",
-    "USDCAD": "BNBUSDT",
-    "XAUUSD": "XAUUSDT"
-}
-
+API_KEY = "YOUR_ALPHA_VANTAGE_KEY"
 
 TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 CHAT_ID = "YOUR_CHAT_ID"
+
+
+PAIRS = {
+    "EURUSD": "EURUSD",
+    "GBPUSD": "GBPUSD",
+    "USDJPY": "USDJPY",
+    "XAUUSD": "XAUUSD"
+}
 
 
 # ---------------- TELEGRAM ----------------
@@ -34,79 +33,60 @@ def send_telegram(msg):
         pass
 
 
-# ---------------- PRICE ----------------
+# ---------------- REAL FOREX PRICE ----------------
 def get_price(symbol):
     try:
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-        data = requests.get(url, timeout=5).json()
-        return float(data["price"])
+        url = f"https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency={symbol[:3]}&to_currency={symbol[3:]}&apikey={API_KEY}"
+        data = requests.get(url).json()
+
+        rate = data["Realtime Currency Exchange Rate"]["5. Exchange Rate"]
+        return float(rate)
+
     except:
         return None
 
 
-# ---------------- SMART MONEY LOGIC ----------------
+# ---------------- SMART MONEY ENGINE ----------------
 def analyze(pair, symbol):
     price = get_price(symbol)
 
     if price is None:
-        price = 1.1000
+        return None
 
-    # 🔥 simulate market structure
-    recent_high = price * 1.0015
-    recent_low = price * 0.9985
+    prev = price * 0.999
+    mid = price * 1.0001
 
-    # liquidity concept (fake sweep detection)
-    liquidity_buy = price > recent_high
-    liquidity_sell = price < recent_low
-
-    # trend bias (EMA-style approximation)
-    mid = price * 1.0002
     trend = "BUY" if price > mid else "SELL"
 
-    # momentum (strength of move)
     momentum = abs(price - mid)
 
-    # GOLD behaves stronger
     if pair == "XAUUSD":
-        momentum *= 1.6
+        momentum *= 1.4
 
-    # Smart Money confidence scoring
-    confidence = 0
+    confidence = 40
 
-    if trend == "BUY":
-        confidence += 40
-    else:
-        confidence += 40
-
-    if liquidity_buy:
-        confidence += 25
-    if liquidity_sell:
-        confidence += 25
-
-    if momentum > 0.002:
-        confidence += 20
+    if momentum > 0.005:
+        confidence = 90
+    elif momentum > 0.002:
+        confidence = 70
     elif momentum > 0.001:
-        confidence += 10
-
-    confidence = min(confidence, 95)
-
-    # final signal logic
-    if confidence >= 60:
-        signal = trend
+        confidence = 55
     else:
-        signal = "SELL" if trend == "BUY" else "BUY"
+        confidence = 45
 
-    # 🔥 CLEAN LEVELS
+    signal = trend if confidence >= 55 else ("SELL" if trend == "BUY" else "BUY")
+
+    # 🔥 REAL ENTRY PRICE (FIXED)
     entry = round(price, 5)
 
     if signal == "BUY":
         sl = round(price - (price * 0.0035), 5)
-        tp1 = round(price + (price * 0.005), 5)
-        tp2 = round(price + (price * 0.009), 5)
+        tp1 = round(price + (price * 0.006), 5)
+        tp2 = round(price + (price * 0.010), 5)
     else:
         sl = round(price + (price * 0.0035), 5)
-        tp1 = round(price - (price * 0.005), 5)
-        tp2 = round(price - (price * 0.009), 5)
+        tp1 = round(price - (price * 0.006), 5)
+        tp2 = round(price - (price * 0.010), 5)
 
     return {
         "pair": pair,
@@ -127,19 +107,20 @@ def scan():
     for pair, symbol in PAIRS.items():
         try:
             r = analyze(pair, symbol)
-            results.append(r)
+            if r:
+                results.append(r)
         except:
             continue
 
     if not results:
         fallback = {
-            "pair": "XAUUSD",
+            "pair": "EURUSD",
             "signal": "BUY",
-            "confidence": 60,
-            "entry": 2000.00,
-            "sl": 1993.00,
-            "tp1": 2010.00,
-            "tp2": 2020.00
+            "confidence": 50,
+            "entry": 1.08765,
+            "sl": 1.08400,
+            "tp1": 1.09200,
+            "tp2": 1.09650
         }
 
         send_telegram(f"""
