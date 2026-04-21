@@ -3,7 +3,7 @@ import requests
 import datetime
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
-
+print("APP STARTED")
 app = Flask(__name__)
 
 @app.route("/")
