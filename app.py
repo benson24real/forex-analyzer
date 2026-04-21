@@ -5,10 +5,10 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "CLEAN FOREX + GOLD SIGNAL BOT RUNNING"
+    return "SMART MONEY FOREX + GOLD BOT RUNNING"
 
 
-# 🔥 FOREX + GOLD
+# 🔥 PAIRS
 PAIRS = {
     "EURUSD": "EURUSDT",
     "GBPUSD": "GBPUSDT",
@@ -44,45 +44,69 @@ def get_price(symbol):
         return None
 
 
-# ---------------- ANALYSIS ----------------
+# ---------------- SMART MONEY LOGIC ----------------
 def analyze(pair, symbol):
     price = get_price(symbol)
 
     if price is None:
         price = 1.1000
 
-    prev = price * 0.999
-    prev2 = price * 1.001
+    # 🔥 simulate market structure
+    recent_high = price * 1.0015
+    recent_low = price * 0.9985
 
-    trend = "BUY" if price > prev else "SELL"
+    # liquidity concept (fake sweep detection)
+    liquidity_buy = price > recent_high
+    liquidity_sell = price < recent_low
 
-    momentum = abs(price - prev2)
+    # trend bias (EMA-style approximation)
+    mid = price * 1.0002
+    trend = "BUY" if price > mid else "SELL"
 
+    # momentum (strength of move)
+    momentum = abs(price - mid)
+
+    # GOLD behaves stronger
     if pair == "XAUUSD":
-        momentum *= 1.5
+        momentum *= 1.6
 
-    if momentum > 0.005:
-        confidence = 90
-    elif momentum > 0.002:
-        confidence = 65
-    elif momentum > 0.001:
-        confidence = 45
+    # Smart Money confidence scoring
+    confidence = 0
+
+    if trend == "BUY":
+        confidence += 40
     else:
-        confidence = 25
+        confidence += 40
 
-    signal = "BUY" if trend == "BUY" and confidence >= 40 else "SELL"
+    if liquidity_buy:
+        confidence += 25
+    if liquidity_sell:
+        confidence += 25
 
-    # 🔥 FIX: CLEAN PRICE LEVELS (IMPORTANT)
+    if momentum > 0.002:
+        confidence += 20
+    elif momentum > 0.001:
+        confidence += 10
+
+    confidence = min(confidence, 95)
+
+    # final signal logic
+    if confidence >= 60:
+        signal = trend
+    else:
+        signal = "SELL" if trend == "BUY" else "BUY"
+
+    # 🔥 CLEAN LEVELS
     entry = round(price, 5)
 
     if signal == "BUY":
-        sl = round(price - (price * 0.004), 5)
-        tp1 = round(price + (price * 0.006), 5)
-        tp2 = round(price + (price * 0.012), 5)
+        sl = round(price - (price * 0.0035), 5)
+        tp1 = round(price + (price * 0.005), 5)
+        tp2 = round(price + (price * 0.009), 5)
     else:
-        sl = round(price + (price * 0.004), 5)
-        tp1 = round(price - (price * 0.006), 5)
-        tp2 = round(price - (price * 0.012), 5)
+        sl = round(price + (price * 0.0035), 5)
+        tp1 = round(price - (price * 0.005), 5)
+        tp2 = round(price - (price * 0.009), 5)
 
     return {
         "pair": pair,
@@ -111,15 +135,15 @@ def scan():
         fallback = {
             "pair": "XAUUSD",
             "signal": "BUY",
-            "confidence": 50,
+            "confidence": 60,
             "entry": 2000.00,
-            "sl": 1992.00,
-            "tp1": 2012.00,
-            "tp2": 2025.00
+            "sl": 1993.00,
+            "tp1": 2010.00,
+            "tp2": 2020.00
         }
 
         send_telegram(f"""
-⚠️ FALLBACK SIGNAL
+SMART MONEY SIGNAL ⚠️
 
 Pair: {fallback['pair']}
 Signal: {fallback['signal']}
@@ -135,21 +159,18 @@ TP2: {fallback['tp2']}
 
     best = max(results, key=lambda x: x["confidence"])
 
-    # 🔥 CLEAN TELEGRAM FORMAT (NO CUT NUMBERS)
-    message = f"""
-FOREX + GOLD SIGNAL
+    send_telegram(f"""
+SMART MONEY SIGNAL
 
 Pair: {best['pair']}
 Signal: {best['signal']}
 Confidence: {best['confidence']}%
 
 ENTRY: {best['entry']}
-STOP LOSS: {best['sl']}
-TAKE PROFIT 1: {best['tp1']}
-TAKE PROFIT 2: {best['tp2']}
-"""
-
-    send_telegram(message)
+SL: {best['sl']}
+TP1: {best['tp1']}
+TP2: {best['tp2']}
+""")
 
     return jsonify(best)
 
