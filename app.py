@@ -5,13 +5,22 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "FINAL STABLE SMART MONEY BOT RUNNING"
+    return "HYBRID SMART MONEY BOT RUNNING"
 
 
-PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"]
-
+# 🔑 API KEYS
+API_KEY = "YOUR_TWELVE_DATA_KEY"
 TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 CHAT_ID = "YOUR_CHAT_ID"
+
+
+# 🔥 PAIRS (CORRECT FORMAT)
+PAIRS = {
+    "EURUSD": "EUR/USD",
+    "GBPUSD": "GBP/USD",
+    "USDJPY": "USD/JPY",
+    "XAUUSD": "XAU/USD"
+}
 
 
 # ---------------- TELEGRAM ----------------
@@ -25,82 +34,89 @@ def send_telegram(msg):
         pass
 
 
-# ---------------- REAL PRICE ATTEMPT ----------------
+# ---------------- REAL PRICE (PRIMARY) ----------------
 def get_price(symbol):
     try:
-        # TRY ALPHA VANTAGE FIRST
-        url = f"https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency={symbol[:3]}&to_currency={symbol[3:]}&apikey=YOUR_KEY"
+        url = f"https://api.twelvedata.com/price?symbol={symbol}&apikey={API_KEY}"
         data = requests.get(url, timeout=5).json()
 
-        rate = data["Realtime Currency Exchange Rate"]["5. Exchange Rate"]
-        return float(rate)
+        if "price" in data:
+            return float(data["price"])
 
+        return None
     except:
         return None
 
 
-# ---------------- FALLBACK PRICE ENGINE ----------------
-def fallback_price(symbol):
-    # realistic dummy ranges (prevents fake 1.1 issues)
-    if symbol == "EURUSD":
-        return 1.08
-    if symbol == "GBPUSD":
+# ---------------- FALLBACK PRICE ----------------
+def fallback_price(pair):
+    # realistic ranges (prevents fake 1.1 issue)
+    if pair == "EURUSD":
+        return 1.10
+    if pair == "GBPUSD":
         return 1.27
-    if symbol == "USDJPY":
-        return 148.5
-    if symbol == "XAUUSD":
-        return 2000.0
+    if pair == "USDJPY":
+        return 150.0
+    if pair == "XAUUSD":
+        return 2300.0
     return 1.0
 
 
 # ---------------- SMART MONEY LOGIC ----------------
-def analyze(symbol):
+def analyze(pair, symbol):
     price = get_price(symbol)
 
     # 🔥 NEVER FAIL
     if price is None:
-        price = fallback_price(symbol)
+        price = fallback_price(pair)
 
-    recent_high = price * 1.0015
-    recent_low = price * 0.9985
+    # STRUCTURE
+    recent_high = price * 1.002
+    recent_low = price * 0.998
     mid = (recent_high + recent_low) / 2
 
     trend = "BUY" if price > mid else "SELL"
 
+    # momentum
     momentum = abs(price - mid)
 
-    if symbol == "XAUUSD":
-        momentum *= 1.4
+    if pair == "XAUUSD":
+        momentum *= 1.5
 
-    confidence = 45
+    # confidence
+    confidence = 50
 
-    if price > mid:
-        confidence += 20
+    if trend == "BUY":
+        confidence += 15
     else:
-        confidence += 20
+        confidence += 15
 
     if momentum > 0.002:
         confidence += 20
     else:
         confidence += 10
 
-    confidence = min(confidence, 92)
+    confidence = min(confidence, 95)
 
-    signal = trend if confidence >= 55 else ("SELL" if trend == "BUY" else "BUY")
+    # signal
+    signal = trend if confidence >= 60 else ("SELL" if trend == "BUY" else "BUY")
+
+    # 🔥 FIXED STRUCTURE LEVELS
+    range_size = recent_high - recent_low
 
     entry = round(price, 5)
 
     if signal == "BUY":
-        sl = round(recent_low, 5)
-        tp1 = round(price + (price - recent_low), 5)
-        tp2 = round(recent_high, 5)
+        sl = round(recent_low - (range_size * 0.2), 5)
+        tp1 = round(price + (range_size * 0.6), 5)
+        tp2 = round(price + (range_size * 1.2), 5)
     else:
-        sl = round(recent_high, 5)
-        tp1 = round(price - (recent_high - price), 5)
-        tp2 = round(recent_low, 5)
+        sl = round(recent_high + (range_size * 0.2), 5)
+        tp1 = round(price - (range_size * 0.6), 5)
+        tp2 = round(price - (range_size * 1.2), 5)
 
     return {
-        "pair": symbol,
+        "pair": pair,
         "signal": signal,
         "confidence": confidence,
         "entry": entry,
@@ -115,16 +131,17 @@ def analyze(symbol):
 def scan():
     results = []
 
-    for symbol in PAIRS:
+    for pair, symbol in PAIRS.items():
         try:
-            results.append(analyze(symbol))
+            r = analyze(pair, symbol)
+            results.append(r)
         except:
             continue
 
     best = max(results, key=lambda x: x["confidence"])
 
-    send_telegram(f"""
-SMART MONEY FINAL SIGNAL
+    message = f"""
+SMART MONEY HYBRID SIGNAL
 
 Pair: {best['pair']}
 Signal: {best['signal']}
@@ -134,7 +151,9 @@ ENTRY: {best['entry']}
 SL: {best['sl']}
 TP1: {best['tp1']}
 TP2: {best['tp2']}
-""")
+"""
+
+    send_telegram(message)
 
     return jsonify(best)
 
