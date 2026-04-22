@@ -5,16 +5,14 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "FINAL SMART MONEY BOT (PRECISION FIXED)"
+    return "SMART MONEY CANDLE BOT RUNNING"
 
 
-# 🔑 KEYS
 API_KEY = "52489f2772614f87957488969609b2e1"
-TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-CHAT_ID = "YOUR_CHAT_ID"
+TELEGRAM_TOKEN = "8764783714:AAF0KdadTOWBcyMW_KpSdZfcWwrqiShELlw"
+CHAT_ID = "928499759"
 
 
-# 🔥 PAIRS
 PAIRS = {
     "EURUSD": "EUR/USD",
     "GBPUSD": "GBP/USD",
@@ -23,7 +21,7 @@ PAIRS = {
 }
 
 
-# ---------------- TELEGRAM ----------------
+# -------- TELEGRAM --------
 def send_telegram(msg):
     try:
         requests.post(
@@ -34,8 +32,29 @@ def send_telegram(msg):
         pass
 
 
-# ---------------- DECIMAL HANDLING ----------------
-def format_price(pair, price):
+# -------- GET REAL CANDLES --------
+def get_candles(symbol):
+    try:
+        url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval=15min&outputsize=50&apikey={API_KEY}"
+        data = requests.get(url).json()
+
+        if "values" not in data:
+            return None
+
+        values = data["values"][::-1]
+
+        closes = [float(v["close"]) for v in values]
+        highs = [float(v["high"]) for v in values]
+        lows = [float(v["low"]) for v in values]
+
+        return closes, highs, lows
+
+    except:
+        return None
+
+
+# -------- DECIMAL FORMAT --------
+def fmt(pair, price):
     if pair in ["EURUSD", "GBPUSD"]:
         return format(price, ".5f")
     elif pair == "USDJPY":
@@ -45,74 +64,49 @@ def format_price(pair, price):
     return str(price)
 
 
-# ---------------- REAL PRICE ----------------
-def get_price(symbol):
-    try:
-        url = f"https://api.twelvedata.com/price?symbol={symbol}&apikey={API_KEY}"
-        data = requests.get(url, timeout=5).json()
-
-        if "price" in data:
-            return float(data["price"])
-
-        return None
-    except:
-        return None
-
-
-# ---------------- FALLBACK ----------------
-def fallback_price(pair):
-    if pair == "EURUSD":
-        return 1.10325
-    if pair == "GBPUSD":
-        return 1.27050
-    if pair == "USDJPY":
-        return 150.250
-    if pair == "XAUUSD":
-        return 2300.50
-    return 1.0
-
-
-# ---------------- SMART MONEY ----------------
+# -------- SMART MONEY --------
 def analyze(pair, symbol):
-    price = get_price(symbol)
+    data = get_candles(symbol)
 
-    if price is None:
-        price = fallback_price(pair)
+    if not data:
+        return None
 
-    # structure
-    recent_high = price * 1.002
-    recent_low = price * 0.998
+    closes, highs, lows = data
+
+    price = closes[-1]
+
+    recent_high = max(highs[-15:])
+    recent_low = min(lows[-15:])
     mid = (recent_high + recent_low) / 2
 
     trend = "BUY" if price > mid else "SELL"
 
-    momentum = abs(price - mid)
+    # liquidity sweep idea
+    buy_liq = price <= recent_low * 1.0002
+    sell_liq = price >= recent_high * 0.9998
 
-    if pair == "XAUUSD":
-        momentum *= 1.5
-
-    # confidence
     confidence = 50
+
     confidence += 15
-    confidence += 20 if momentum > 0.002 else 10
+    if buy_liq or sell_liq:
+        confidence += 20
+
     confidence = min(confidence, 95)
 
     signal = trend if confidence >= 60 else ("SELL" if trend == "BUY" else "BUY")
 
-    # 🔥 STRUCTURE RANGE
     range_size = recent_high - recent_low
 
-    # 🔥 FORMATTED LEVELS
-    entry = format_price(pair, price)
+    entry = fmt(pair, price)
 
     if signal == "BUY":
-        sl = format_price(pair, recent_low - (range_size * 0.2))
-        tp1 = format_price(pair, price + (range_size * 0.6))
-        tp2 = format_price(pair, price + (range_size * 1.2))
+        sl = fmt(pair, recent_low)
+        tp1 = fmt(pair, price + range_size * 0.6)
+        tp2 = fmt(pair, price + range_size * 1.2)
     else:
-        sl = format_price(pair, recent_high + (range_size * 0.2))
-        tp1 = format_price(pair, price - (range_size * 0.6))
-        tp2 = format_price(pair, price - (range_size * 1.2))
+        sl = fmt(pair, recent_high)
+        tp1 = fmt(pair, price - range_size * 0.6)
+        tp2 = fmt(pair, price - range_size * 1.2)
 
     return {
         "pair": pair,
@@ -125,7 +119,7 @@ def analyze(pair, symbol):
     }
 
 
-# ---------------- SCAN ----------------
+# -------- SCAN --------
 @app.route("/scan")
 def scan():
     results = []
@@ -133,30 +127,31 @@ def scan():
     for pair, symbol in PAIRS.items():
         try:
             r = analyze(pair, symbol)
-            results.append(r)
+            if r:
+                results.append(r)
         except:
             continue
 
+    if not results:
+        return jsonify({"error": "no data"})
+
     best = max(results, key=lambda x: x["confidence"])
 
-    message = f"""
-📊 SMART MONEY SIGNAL
+    send_telegram(f"""
+SMART MONEY (REAL DATA)
 
 Pair: {best['pair']}
 Signal: {best['signal']}
 Confidence: {best['confidence']}%
 
-ENTRY: {best['entry']}
-STOP LOSS: {best['sl']}
-TAKE PROFIT 1: {best['tp1']}
-TAKE PROFIT 2: {best['tp2']}
-"""
-
-    send_telegram(message)
+Entry: {best['entry']}
+SL: {best['sl']}
+TP1: {best['tp1']}
+TP2: {best['tp2']}
+""")
 
     return jsonify(best)
 
 
-# ---------------- RUN ----------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
