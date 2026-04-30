@@ -10,13 +10,13 @@ app = Flask(**name**)
 
 @app.route("/")
 def home():
-return "ELITE SMART MONEY BOT (RENDER SAFE + STABLE VERSION)"
+return "ELITE SMART MONEY BOT (RENDER SAFE + FIXED CLEAN VERSION)"
 
 # ================= KEYS =================
 
-API_KEY = "52489f2772614f87957488969609b2e1"
-TELEGRAM_TOKEN = "8764783714:AAF0KdadTOWBcyMW_KpSdZfcWwrqiShELlw"
-CHAT_ID = "928499759"
+API_KEY = "YOUR_TWELVEDATA_API_KEY"
+TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+CHAT_ID = "YOUR_CHAT_ID"
 
 # ================= PAIRS =================
 
@@ -124,10 +124,10 @@ return {
 }
 ```
 
-# ================= SAFE BOT LOOP =================
+# ================= AUTO BOT LOOP =================
 
 def run_bot():
-print("BOT STARTED")
+print("BOT STARTED SUCCESSFULLY")
 
 ```
 while True:
@@ -158,10 +158,11 @@ Entry: {best['entry']}
 SL: {best['sl']}
 TP: {best['tp']}
 """
-send_telegram(msg)
-print("SIGNAL SENT")
 
 ```
+                send_telegram(msg)
+                print("SIGNAL SENT")
+
     except Exception as e:
         print("BOT LOOP ERROR:", e)
 
@@ -194,8 +195,8 @@ run_bot()
 
 Thread(target=start_bot, daemon=True).start()
 
-# ================= RUN =================
+# ================= RUN SERVER =================
 
 if **name** == "**main**":
 port = int(os.environ.get("PORT", 10000))
-app.run(host="0.0.0.0", port=port)
+app.run(host=
