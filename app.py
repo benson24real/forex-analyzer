@@ -4,493 +4,356 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from statistics import mean
 from datetime import datetime
 
-app = Flask(__name__)
+app = Flask(**name**)
 
 @app.route("/")
 def home():
-    return "ELITE SMART MONEY SIGNAL BOT"
-
+return "ELITE SMART MONEY SIGNAL BOT (RELAXED VERSION)"
 
 # ================= KEYS =================
+
 API_KEY = "52489f2772614f87957488969609b2e1"
 TELEGRAM_TOKEN = "8764783714:AAF0KdadTOWBcyMW_KpSdZfcWwrqiShELlw"
 CHAT_ID = "928499759"
 
-
 # ================= PAIRS =================
+
 PAIRS = {
-    "EURUSD": "EUR/USD",
-    "GBPUSD": "GBP/USD",
-    "USDJPY": "USD/JPY",
-    "XAUUSD": "XAU/USD"
+"EURUSD": "EUR/USD",
+"GBPUSD": "GBP/USD",
+"USDJPY": "USD/JPY",
+"XAUUSD": "XAU/USD"
 }
 
-
 # ================= MEMORY =================
+
 last_signal = {}
 
-
 # ================= TELEGRAM =================
-def send_telegram(msg):
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            data={
-                "chat_id": CHAT_ID,
-                "text": msg
-            },
-            timeout=10
-        )
-    except Exception as e:
-        print("Telegram Error:", e)
 
+def send_telegram(msg):
+try:
+requests.post(
+f"[https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage](https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage)",
+data={"chat_id": CHAT_ID, "text": msg},
+timeout=10
+)
+except Exception as e:
+print("Telegram Error:", e)
 
 # ================= FORMAT =================
+
 def fmt(pair, price):
-    if pair in ["EURUSD", "GBPUSD"]:
-        return format(price, ".5f")
-
-    elif pair == "USDJPY":
-        return format(price, ".3f")
-
-    elif pair == "XAUUSD":
-        return format(price, ".2f")
-
-    return str(price)
-
+if pair in ["EURUSD", "GBPUSD"]:
+return format(price, ".5f")
+elif pair == "USDJPY":
+return format(price, ".3f")
+elif pair == "XAUUSD":
+return format(price, ".2f")
+return str(price)
 
 # ================= GET DATA =================
-def get_candles(symbol, interval="15min", size=120):
-    try:
-        url = (
-            f"https://api.twelvedata.com/time_series"
-            f"?symbol={symbol}"
-            f"&interval={interval}"
-            f"&outputsize={size}"
-            f"&apikey={API_KEY}"
-        )
 
-        data = requests.get(url, timeout=10).json()
+def get_candles(symbol, interval="15min", size=250):
+try:
+url = (
+f"[https://api.twelvedata.com/time_series](https://api.twelvedata.com/time_series)"
+f"?symbol={symbol}&interval={interval}&outputsize={size}&apikey={API_KEY}"
+)
 
-        if "values" not in data:
-            return None
+```
+    data = requests.get(url, timeout=10).json()
 
-        values = data["values"][::-1]
-
-        opens = [float(v["open"]) for v in values]
-        closes = [float(v["close"]) for v in values]
-        highs = [float(v["high"]) for v in values]
-        lows = [float(v["low"]) for v in values]
-
-        return opens, closes, highs, lows
-
-    except Exception as e:
-        print("DATA ERROR:", e)
+    if "values" not in data:
         return None
 
+    values = data["values"][::-1]
+
+    opens = [float(v["open"]) for v in values]
+    closes = [float(v["close"]) for v in values]
+    highs = [float(v["high"]) for v in values]
+    lows = [float(v["low"]) for v in values]
+
+    return opens, closes, highs, lows
+
+except Exception as e:
+    print("DATA ERROR:", e)
+    return None
+```
 
 # ================= EMA =================
+
 def ema(data, period):
-    if len(data) < period:
-        return None
+if len(data) < period:
+return None
 
-    multiplier = 2 / (period + 1)
+```
+multiplier = 2 / (period + 1)
+ema_values = [mean(data[:period])]
 
-    ema_values = [mean(data[:period])]
+for price in data[period:]:
+    ema_values.append((price - ema_values[-1]) * multiplier + ema_values[-1])
 
-    for price in data[period:]:
-        ema_values.append(
-            (price - ema_values[-1]) * multiplier + ema_values[-1]
-        )
-
-    return ema_values[-1]
-
+return ema_values[-1]
+```
 
 # ================= RSI =================
+
 def rsi(closes, period=14):
-    if len(closes) < period + 1:
-        return 50
+if len(closes) < period + 1:
+return 50
 
-    gains = []
-    losses = []
+```
+gains, losses = [], []
 
-    for i in range(1, period + 1):
-        diff = closes[-i] - closes[-i - 1]
+for i in range(1, period + 1):
+    diff = closes[-i] - closes[-i - 1]
+    if diff > 0:
+        gains.append(diff)
+    else:
+        losses.append(abs(diff))
 
-        if diff > 0:
-            gains.append(diff)
-        else:
-            losses.append(abs(diff))
+avg_gain = sum(gains) / period if gains else 0.0001
+avg_loss = sum(losses) / period if losses else 0.0001
 
-    avg_gain = sum(gains) / period if gains else 0.0001
-    avg_loss = sum(losses) / period if losses else 0.0001
-
-    rs = avg_gain / avg_loss
-
-    return 100 - (100 / (1 + rs))
-
+rs = avg_gain / avg_loss
+return 100 - (100 / (1 + rs))
+```
 
 # ================= ATR =================
-def atr(highs, lows, closes, period=14):
-    trs = []
 
-    for i in range(1, len(closes)):
-        tr = max(
-            highs[i] - lows[i],
-            abs(highs[i] - closes[i - 1]),
-            abs(lows[i] - closes[i - 1])
-        )
+def atr(highs, lows, closes):
+trs = []
 
-        trs.append(tr)
+```
+for i in range(1, len(closes)):
+    tr = max(
+        highs[i] - lows[i],
+        abs(highs[i] - closes[i - 1]),
+        abs(lows[i] - closes[i - 1])
+    )
+    trs.append(tr)
 
-    if len(trs) < period:
-        return 0
+if len(trs) < 14:
+    return 0
 
-    return sum(trs[-period:]) / period
+return sum(trs[-14:]) / 14
+```
 
+# ================= STRUCTURE =================
 
-# ================= BOS =================
 def detect_bos(closes):
-    recent_high = max(closes[-10:-1])
-    recent_low = min(closes[-10:-1])
+if closes[-1] > max(closes[-10:-1]):
+return "BUY"
+if closes[-1] < min(closes[-10:-1]):
+return "SELL"
+return None
 
-    if closes[-1] > recent_high:
-        return "BUY"
-
-    if closes[-1] < recent_low:
-        return "SELL"
-
-    return None
-
-
-# ================= CHOCH =================
 def detect_choch(closes):
-    previous_high = max(closes[-20:-10])
-    recent_high = max(closes[-10:])
+if max(closes[-10:]) > max(closes[-20:-10]):
+return "BULLISH"
+if min(closes[-10:]) < min(closes[-20:-10]):
+return "BEARISH"
+return None
 
-    previous_low = min(closes[-20:-10])
-    recent_low = min(closes[-10:])
+def detect_ob(opens, closes):
+return "BULLISH" if closes[-2] > opens[-2] else "BEARISH"
 
-    if recent_high > previous_high:
-        return "BULLISH"
-
-    if recent_low < previous_low:
-        return "BEARISH"
-
-    return None
-
-
-# ================= ORDER BLOCK =================
-def detect_order_block(opens, closes):
-    last_open = opens[-2]
-    last_close = closes[-2]
-
-    if last_close > last_open:
-        return "BULLISH"
-
-    if last_close < last_open:
-        return "BEARISH"
-
-    return None
-
-
-# ================= FVG =================
 def detect_fvg(highs, lows):
-    if lows[-1] > highs[-3]:
-        return "BULLISH"
+if lows[-1] > highs[-3]: return "BULLISH"
+if highs[-1] < lows[-3]: return "BEARISH"
+return None
 
-    if highs[-1] < lows[-3]:
-        return "BEARISH"
-
-    return None
-
-
-# ================= FVG RETEST =================
 def fvg_retest(highs, lows, closes):
-    if lows[-2] > highs[-4]:
-        if closes[-1] > highs[-4]:
-            return "BULLISH"
+if lows[-2] > highs[-4] and closes[-1] > highs[-4]:
+return "BULLISH"
+if highs[-2] < lows[-4] and closes[-1] < lows[-4]:
+return "BEARISH"
+return None
 
-    if highs[-2] < lows[-4]:
-        if closes[-1] < lows[-4]:
-            return "BEARISH"
+def candle_confirm(opens, closes):
+body = abs(closes[-1] - opens[-1])
+avg = mean([abs(closes[i] - opens[i]) for i in range(-10, -1)])
 
-    return None
+```
+if body > avg * 1.2:
+    return "BUY" if closes[-1] > opens[-1] else "SELL"
 
+return None
+```
 
-# ================= CANDLE CONFIRMATION =================
-def candle_confirmation(opens, closes):
-    current_open = opens[-1]
-    current_close = closes[-1]
+# ================= ANTI CHOP (RELAXED) =================
 
-    body = abs(current_close - current_open)
+def market_chop(highs, lows, closes):
+rng = max(highs[-20:]) - min(lows[-20:])
+moves = [abs(closes[i] - closes[i - 1]) for i in range(-15, -1)]
+avg = sum(moves) / len(moves)
 
-    avg_body = mean([
-        abs(closes[i] - opens[i])
-        for i in range(-10, -1)
-    ])
+```
+if avg == 0:
+    return True
 
-    if body > avg_body * 1.2:
+return (rng / avg) < 1.2
+```
 
-        if current_close > current_open:
-            return "BUY"
+# ================= RR (REMOVED FROM FILTER - ONLY CHECK) =================
 
-        if current_close < current_open:
-            return "SELL"
+def rr_ok(price, sl, tp):
+risk = abs(price - sl)
+reward = abs(tp - price)
+return reward / risk >= 1.5 if risk else False
 
-    return None
+# ================= SESSION (NOT BLOCKING ANYMORE) =================
 
-
-# ================= ANTI CHOP FILTER =================
-def market_is_choppy(highs, lows, closes):
-    recent_range = max(highs[-20:]) - min(lows[-20:])
-
-    moves = []
-
-    for i in range(-15, -1):
-        moves.append(abs(closes[i] - closes[i - 1]))
-
-    avg_move = sum(moves) / len(moves)
-
-    if avg_move == 0:
-        return True
-
-    ratio = recent_range / avg_move
-
-    return ratio < 1.8
-
-
-# ================= RR FILTER =================
-def valid_rr(price, sl, tp):
-    risk = abs(price - sl)
-    reward = abs(tp - price)
-
-    if risk == 0:
-        return False
-
-    rr = reward / risk
-
-    return rr >= 2
-
-
-# ================= SESSION FILTER =================
-def session_filter():
-    hour = datetime.utcnow().hour
-
-    return 6 <= hour <= 18
-
+def session_ok():
+hour = datetime.utcnow().hour
+return True
 
 # ================= ANALYZE =================
+
 def analyze(pair, symbol, mode="auto"):
 
-    m15 = get_candles(symbol, "15min", 120)
-    h1 = get_candles(symbol, "1h", 120)
+```
+data = get_candles(symbol)
+h1 = get_candles(symbol, "1h", 250)
 
-    if not m15 or not h1:
-        return None
+if not data or not h1:
+    return None
 
-    opens, closes, highs, lows = m15
-    h1_opens, h1_closes, h1_highs, h1_lows = h1
+opens, closes, highs, lows = data
+h1o, h1c, h1h, h1l = h1
 
-    price = closes[-1]
+price = closes[-1]
 
-    # ================= ANTI CHOP =================
-    if market_is_choppy(highs, lows, closes):
-        return None
+if market_chop(highs, lows, closes):
+    return None
 
-    # ================= EMA TREND =================
-    ema50 = ema(closes, 50)
-    ema200 = ema(closes, 100)
+ema50 = ema(closes, 50)
+ema200 = ema(closes, 200)
 
-    if not ema50 or not ema200:
-        return None
+if not ema50 or not ema200:
+    return None
 
-    trend = None
+trend = "BUY" if ema50 > ema200 else "SELL"
 
-    if ema50 > ema200:
-        trend = "BUY"
+r = rsi(closes)
 
-    elif ema50 < ema200:
-        trend = "SELL"
+if trend == "BUY" and r > 85:
+    return None
+if trend == "SELL" and r < 15:
+    return None
 
-    if not trend:
-        return None
+bos = detect_bos(closes)
+choch = detect_choch(closes)
+ob = detect_ob(opens, closes)
+fvg = detect_fvg(highs, lows)
+retest = fvg_retest(highs, lows, closes)
+candle = candle_confirm(opens, closes)
 
-    # ================= RSI FILTER =================
-    current_rsi = rsi(closes)
+atrv = atr(highs, lows, closes)
+if atrv == 0:
+    return None
 
-    if trend == "BUY" and current_rsi > 75:
-        return None
+recent_high = max(highs[-15:])
+recent_low = min(lows[-15:])
 
-    if trend == "SELL" and current_rsi < 25:
-        return None
+buy_liq = lows[-1] <= recent_low
+sell_liq = highs[-1] >= recent_high
 
-    # ================= BOS =================
-    bos = detect_bos(closes)
+confidence = 50
+confidence += 10
 
-    # ================= CHOCH =================
-    choch = detect_choch(closes)
-
-    # ================= ORDER BLOCK =================
-    ob = detect_order_block(opens, closes)
-
-    # ================= FVG =================
-    fvg = detect_fvg(highs, lows)
-
-    # ================= FVG RETEST =================
-    retest = fvg_retest(highs, lows, closes)
-
-    # ================= CANDLE =================
-    candle = candle_confirmation(opens, closes)
-
-    # ================= ATR =================
-    current_atr = atr(highs, lows, closes)
-
-    if current_atr == 0:
-        return None
-
-    # ================= SESSION FILTER =================
-    if mode == "auto" and not session_filter():
-        return None
-
-    # ================= LIQUIDITY =================
-    recent_high = max(highs[-15:])
-    recent_low = min(lows[-15:])
-
-    buy_liq = lows[-1] <= recent_low * 1.0002
-    sell_liq = highs[-1] >= recent_high * 0.9998
-
-    # ================= CONFIDENCE =================
-    confidence = 50
-
+if bos == trend:
+    confidence += 15
+if choch == "BULLISH" and trend == "BUY":
     confidence += 10
+if choch == "BEARISH" and trend == "SELL":
+    confidence += 10
+if ob == "BULLISH" and trend == "BUY":
+    confidence += 10
+if ob == "BEARISH" and trend == "SELL":
+    confidence += 10
+if fvg == trend:
+    confidence += 10
+if retest == trend:
+    confidence += 10
+if candle == trend:
+    confidence += 10
+if buy_liq and trend == "BUY":
+    confidence += 15
+if sell_liq and trend == "SELL":
+    confidence += 15
 
-    if bos == trend:
-        confidence += 15
+h1ema50 = ema(h1c, 50)
+h1ema200 = ema(h1c, 200)
 
-    if trend == "BUY" and choch == "BULLISH":
+if h1ema50 and h1ema200:
+    if trend == "BUY" and h1ema50 > h1ema200:
+        confidence += 10
+    if trend == "SELL" and h1ema50 < h1ema200:
         confidence += 10
 
-    if trend == "SELL" and choch == "BEARISH":
-        confidence += 10
+confidence = min(confidence, 95)
 
-    if trend == "BUY" and ob == "BULLISH":
-        confidence += 10
+if mode == "auto" and confidence < 65:
+    return None
 
-    if trend == "SELL" and ob == "BEARISH":
-        confidence += 10
+if trend == "BUY":
+    sl = recent_low - atrv
+    tp1 = price + atrv * 2
+    tp2 = price + atrv * 4
+else:
+    sl = recent_high + atrv
+    tp1 = price - atrv * 2
+    tp2 = price - atrv * 4
 
-    if trend == "BUY" and fvg == "BULLISH":
-        confidence += 10
-
-    if trend == "SELL" and fvg == "BEARISH":
-        confidence += 10
-
-    if trend == "BUY" and retest == "BULLISH":
-        confidence += 10
-
-    if trend == "SELL" and retest == "BEARISH":
-        confidence += 10
-
-    if candle == trend:
-        confidence += 10
-
-    if trend == "BUY" and buy_liq:
-        confidence += 15
-
-    if trend == "SELL" and sell_liq:
-        confidence += 15
-
-    # ================= H1 CONFIRMATION =================
-    h1_ema50 = ema(h1_closes, 50)
-    h1_ema200 = ema(h1_closes, 100)
-
-    if h1_ema50 and h1_ema200:
-
-        if trend == "BUY" and h1_ema50 > h1_ema200:
-            confidence += 10
-
-        if trend == "SELL" and h1_ema50 < h1_ema200:
-            confidence += 10
-
-    confidence = min(confidence, 95)
-
-    # ================= AUTO FILTER =================
-    if mode == "auto" and confidence < 80:
-        return None
-
-    # ================= SL TP =================
-    if trend == "BUY":
-
-        sl = recent_low - current_atr * 0.5
-        tp1 = price + current_atr * 2
-        tp2 = price + current_atr * 4
-
-    else:
-
-        sl = recent_high + current_atr * 0.5
-        tp1 = price - current_atr * 2
-        tp2 = price - current_atr * 4
-
-    # ================= RR FILTER =================
-    if not valid_rr(price, sl, tp1):
-        return None
-
-    # ================= RETURN =================
-    return {
-        "pair": pair,
-        "signal": trend,
-        "confidence": confidence,
-        "entry": fmt(pair, price),
-        "sl": fmt(pair, sl),
-        "tp1": fmt(pair, tp1),
-        "tp2": fmt(pair, tp2),
-        "rsi": round(current_rsi, 2),
-        "bos": bos,
-        "choch": choch,
-        "fvg": fvg,
-        "retest": retest,
-        "order_block": ob,
-        "atr": round(current_atr, 5)
-    }
-
+return {
+    "pair": pair,
+    "signal": trend,
+    "confidence": confidence,
+    "entry": fmt(pair, price),
+    "sl": fmt(pair, sl),
+    "tp1": fmt(pair, tp1),
+    "tp2": fmt(pair, tp2),
+    "rsi": r,
+    "bos": bos,
+    "choch": choch,
+    "fvg": fvg,
+    "retest": retest,
+    "ob": ob,
+    "atr": atrv
+}
+```
 
 # ================= AUTO SCAN =================
+
 def auto_scan():
 
-    global last_signal
+```
+global last_signal
 
-    print("AUTO SCAN RUNNING")
+results = []
 
-    results = []
+for p, s in PAIRS.items():
+    r = analyze(p, s, "auto")
+    if r:
+        results.append(r)
 
-    for pair, symbol in PAIRS.items():
+if not results:
+    print("NO SIGNALS")
+    return
 
-        try:
-            result = analyze(pair, symbol, mode="auto")
+best = max(results, key=lambda x: x["confidence"])
 
-            if result:
-                results.append(result)
+if last_signal.get(best["pair"]) == best["signal"]:
+    return
 
-        except Exception as e:
-            print(pair, e)
+last_signal[best["pair"]] = best["signal"]
 
-    if not results:
-        print("NO SIGNALS")
-        return
+msg = f"""
+```
 
-    best = max(results, key=lambda x: x["confidence"])
-
-    # ================= DUPLICATE BLOCK =================
-    if last_signal.get(best["pair"]) == best["signal"]:
-        print("DUPLICATE BLOCKED")
-        return
-
-    last_signal[best["pair"]] = best["signal"]
-
-    # ================= MESSAGE =================
-    message = f"""
-🔥 ELITE SMART MONEY SIGNAL
+🔥 ELITE SIGNAL
 
 Pair: {best['pair']}
 Signal: {best['signal']}
@@ -505,59 +368,39 @@ RSI: {best['rsi']}
 BOS: {best['bos']}
 CHOCH: {best['choch']}
 FVG: {best['fvg']}
-Retest: {best['retest']}
-Order Block: {best['order_block']}
+RETEST: {best['retest']}
+OB: {best['ob']}
 ATR: {best['atr']}
 """
 
-    send_telegram(message)
+```
+send_telegram(msg)
+print("SENT")
+```
 
-    print("SIGNAL SENT")
+# ================= MANUAL =================
 
-
-# ================= MANUAL SCAN =================
 @app.route("/scan")
 def scan():
+res = []
 
-    results = []
+```
+for p, s in PAIRS.items():
+    r = analyze(p, s, "manual")
+    if r:
+        res.append(r)
 
-    for pair, symbol in PAIRS.items():
+if not res:
+    return jsonify({"message": "No signals"})
 
-        try:
-            result = analyze(pair, symbol, mode="manual")
-
-            if result:
-                results.append(result)
-
-        except Exception as e:
-            print(pair, e)
-
-    if not results:
-        return jsonify({
-            "message": "No signals available"
-        })
-
-    results = sorted(
-        results,
-        key=lambda x: x["confidence"],
-        reverse=True
-    )
-
-    return jsonify(results)
-
-
-# ================= SCHEDULER =================
-scheduler = BackgroundScheduler()
-
-scheduler.add_job(
-    func=auto_scan,
-    trigger="interval",
-    minutes=10
-)
-
-scheduler.start()
-
+return jsonify(sorted(res, key=lambda x: x["confidence"], reverse=True))
+```
 
 # ================= RUN =================
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(auto_scan, "interval", minutes=10)
+scheduler.start()
+
+if **name** == "**main**":
+app.run(host="0.0.0.0", port=10000)
