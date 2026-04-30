@@ -13,8 +13,8 @@ def home():
 
 # ================= KEYS =================
 API_KEY = "52489f2772614f87957488969609b2e1"
-TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-CHAT_ID = "YOUR_CHAT_ID"
+TELEGRAM_TOKEN = "8764783714:AAF0KdadTOWBcyMW_KpSdZfcWwrqiShELlw"
+CHAT_ID = "928499759"
 
 # ================= PAIRS =================
 PAIRS = {
