@@ -10,7 +10,7 @@ app = Flask(**name**)
 
 @app.route("/")
 def home():
-return "ELITE SMART MONEY BOT (RENDER SAFE + SCAN ENABLED)"
+return "ELITE SMART MONEY BOT (RENDER SAFE + STABLE VERSION)"
 
 # ================= KEYS =================
 
@@ -40,18 +40,19 @@ f"[https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage](https://api.telegra
 data={"chat_id": CHAT_ID, "text": msg},
 timeout=10
 )
-except:
-pass
+except Exception as e:
+print("TELEGRAM ERROR:", e)
 
 # ================= DATA =================
 
 def get_candles(symbol, interval="15min", size=200):
 try:
 url = f"[https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&outputsize={size}&apikey={API_KEY}](https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&outputsize={size}&apikey={API_KEY})"
-data = requests.get(url).json()
+data = requests.get(url, timeout=10).json()
 
 ```
-    if "values" not in data:
+    if not data or "values" not in data:
+        print("API ERROR RESPONSE:", data)
         return None
 
     values = data["values"][::-1]
@@ -62,7 +63,9 @@ data = requests.get(url).json()
     lows = [float(v["low"]) for v in values]
 
     return opens, closes, highs, lows
-except:
+
+except Exception as e:
+    print("DATA ERROR:", e)
     return None
 ```
 
@@ -121,26 +124,28 @@ return {
 }
 ```
 
-# ================= AUTO LOOP =================
+# ================= SAFE BOT LOOP =================
 
 def run_bot():
-while True:
+print("BOT STARTED")
 
 ```
-    results = []
+while True:
+    try:
+        results = []
 
-    for p, s in PAIRS.items():
-        r = analyze(p, s)
-        if r:
-            results.append(r)
+        for p, s in PAIRS.items():
+            r = analyze(p, s)
+            if r:
+                results.append(r)
 
-    if results:
-        best = max(results, key=lambda x: x["confidence"])
+        if results:
+            best = max(results, key=lambda x: x["confidence"])
 
-        if last_signal.get(best["pair"]) != best["signal"]:
-            last_signal[best["pair"]] = best["signal"]
+            if last_signal.get(best["pair"]) != best["signal"]:
+                last_signal[best["pair"]] = best["signal"]
 
-            msg = f"""
+                msg = f"""
 ```
 
 🔥 SIGNAL
@@ -153,9 +158,12 @@ Entry: {best['entry']}
 SL: {best['sl']}
 TP: {best['tp']}
 """
+send_telegram(msg)
+print("SIGNAL SENT")
 
 ```
-            send_telegram(msg)
+    except Exception as e:
+        print("BOT LOOP ERROR:", e)
 
     time.sleep(600)
 ```
@@ -164,10 +172,9 @@ TP: {best['tp']}
 
 @app.route("/scan")
 def scan():
-
-```
 results = []
 
+```
 for p, s in PAIRS.items():
     r = analyze(p, s)
     if r:
@@ -179,11 +186,15 @@ if not results:
 return jsonify(sorted(results, key=lambda x: x["confidence"], reverse=True))
 ```
 
-# ================= START BOT =================
+# ================= START BOT SAFELY =================
 
-Thread(target=run_bot, daemon=True).start()
+def start_bot():
+time.sleep(5)
+run_bot()
 
-# ================= RUN SERVER =================
+Thread(target=start_bot, daemon=True).start()
+
+# ================= RUN =================
 
 if **name** == "**main**":
 port = int(os.environ.get("PORT", 10000))
