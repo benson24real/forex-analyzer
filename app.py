@@ -4,138 +4,145 @@ from threading import Thread
 import time
 from statistics import mean
 from datetime import datetime
+import os
 
-app = Flask(__name__)
+app = Flask(**name**)
 
 @app.route("/")
 def home():
-    return "ELITE SMART MONEY BOT (RENDER SAFE)"
-
+return "ELITE SMART MONEY BOT (RENDER SAFE + SCAN ENABLED)"
 
 # ================= KEYS =================
+
 API_KEY = "52489f2772614f87957488969609b2e1"
 TELEGRAM_TOKEN = "8764783714:AAF0KdadTOWBcyMW_KpSdZfcWwrqiShELlw"
 CHAT_ID = "928499759"
 
-
 # ================= PAIRS =================
+
 PAIRS = {
-    "EURUSD": "EUR/USD",
-    "GBPUSD": "GBP/USD",
-    "USDJPY": "USD/JPY",
-    "XAUUSD": "XAU/USD"
+"EURUSD": "EUR/USD",
+"GBPUSD": "GBP/USD",
+"USDJPY": "USD/JPY",
+"XAUUSD": "XAU/USD"
 }
+
+# ================= MEMORY =================
 
 last_signal = {}
 
-
 # ================= TELEGRAM =================
-def send_telegram(msg):
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            data={"chat_id": CHAT_ID, "text": msg},
-            timeout=10
-        )
-    except:
-        pass
 
+def send_telegram(msg):
+try:
+requests.post(
+f"[https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage](https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage)",
+data={"chat_id": CHAT_ID, "text": msg},
+timeout=10
+)
+except:
+pass
 
 # ================= DATA =================
+
 def get_candles(symbol, interval="15min", size=200):
-    try:
-        url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&outputsize={size}&apikey={API_KEY}"
-        data = requests.get(url).json()
+try:
+url = f"[https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&outputsize={size}&apikey={API_KEY}](https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&outputsize={size}&apikey={API_KEY})"
+data = requests.get(url).json()
 
-        if "values" not in data:
-            return None
-
-        values = data["values"][::-1]
-
-        opens = [float(v["open"]) for v in values]
-        closes = [float(v["close"]) for v in values]
-        highs = [float(v["high"]) for v in values]
-        lows = [float(v["low"]) for v in values]
-
-        return opens, closes, highs, lows
-    except:
+```
+    if "values" not in data:
         return None
 
+    values = data["values"][::-1]
+
+    opens = [float(v["open"]) for v in values]
+    closes = [float(v["close"]) for v in values]
+    highs = [float(v["high"]) for v in values]
+    lows = [float(v["low"]) for v in values]
+
+    return opens, closes, highs, lows
+except:
+    return None
+```
 
 # ================= TREND =================
+
 def trend(closes):
-    ema50 = mean(closes[-50:])
-    ema200 = mean(closes[-200:]) if len(closes) >= 200 else ema50
-
-    return "BUY" if ema50 > ema200 else "SELL"
-
+ema50 = mean(closes[-50:])
+ema200 = mean(closes[-200:]) if len(closes) >= 200 else ema50
+return "BUY" if ema50 > ema200 else "SELL"
 
 # ================= ANALYZE =================
+
 def analyze(pair, symbol):
 
-    data = get_candles(symbol)
-    if not data:
-        return None
+```
+data = get_candles(symbol)
+if not data:
+    return None
 
-    opens, closes, highs, lows = data
-    price = closes[-1]
+opens, closes, highs, lows = data
+price = closes[-1]
 
-    recent_high = max(highs[-20:])
-    recent_low = min(lows[-20:])
+recent_high = max(highs[-20:])
+recent_low = min(lows[-20:])
 
-    t = trend(closes)
+t = trend(closes)
 
-    # liquidity sweep
-    buy_liq = lows[-1] <= recent_low
-    sell_liq = highs[-1] >= recent_high
+buy_liq = lows[-1] <= recent_low
+sell_liq = highs[-1] >= recent_high
 
-    confidence = 55
+confidence = 55
 
-    if buy_liq or sell_liq:
-        confidence += 15
+if buy_liq or sell_liq:
+    confidence += 15
 
-    confidence += 10
+confidence += 10
+confidence = min(confidence, 90)
 
-    confidence = min(confidence, 90)
+if confidence < 60:
+    return None
 
-    if confidence < 60:
-        return None
+if t == "BUY":
+    sl = recent_low
+    tp = price + (price - sl) * 2
+else:
+    sl = recent_high
+    tp = price - (sl - price) * 2
 
-    if t == "BUY":
-        sl = recent_low
-        tp = price + (price - sl) * 2
-    else:
-        sl = recent_high
-        tp = price - (sl - price) * 2
+return {
+    "pair": pair,
+    "signal": t,
+    "confidence": confidence,
+    "entry": price,
+    "sl": sl,
+    "tp": tp
+}
+```
 
-    return {
-        "pair": pair,
-        "signal": t,
-        "confidence": confidence,
-        "entry": price,
-        "sl": sl,
-        "tp": tp
-    }
+# ================= AUTO LOOP =================
 
-
-# ================= AUTO LOOP (RENDER SAFE) =================
 def run_bot():
-    while True:
+while True:
 
-        results = []
+```
+    results = []
 
-        for p, s in PAIRS.items():
-            r = analyze(p, s)
-            if r:
-                results.append(r)
+    for p, s in PAIRS.items():
+        r = analyze(p, s)
+        if r:
+            results.append(r)
 
-        if results:
-            best = max(results, key=lambda x: x["confidence"])
+    if results:
+        best = max(results, key=lambda x: x["confidence"])
 
-            if last_signal.get(best["pair"]) != best["signal"]:
-                last_signal[best["pair"]] = best["signal"]
+        if last_signal.get(best["pair"]) != best["signal"]:
+            last_signal[best["pair"]] = best["signal"]
 
-                msg = f"""
+            msg = f"""
+```
+
 🔥 SIGNAL
 
 Pair: {best['pair']}
@@ -146,15 +153,38 @@ Entry: {best['entry']}
 SL: {best['sl']}
 TP: {best['tp']}
 """
-                send_telegram(msg)
 
-        time.sleep(600)  # 10 mins
+```
+            send_telegram(msg)
 
+    time.sleep(600)
+```
 
-# ================= START THREAD =================
+# ================= MANUAL SCAN =================
+
+@app.route("/scan")
+def scan():
+
+```
+results = []
+
+for p, s in PAIRS.items():
+    r = analyze(p, s)
+    if r:
+        results.append(r)
+
+if not results:
+    return jsonify({"message": "No signals"})
+
+return jsonify(sorted(results, key=lambda x: x["confidence"], reverse=True))
+```
+
+# ================= START BOT =================
+
 Thread(target=run_bot, daemon=True).start()
 
+# ================= RUN SERVER =================
 
-# ================= RUN APP =================
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+if **name** == "**main**":
+port = int(os.environ.get("PORT", 10000))
+app.run(host="0.0.0.0", port=port)
