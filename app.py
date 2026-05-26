@@ -8,18 +8,25 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "ELITE SMART MONEY BOT PRO (FAST MTF VERSION)"
+    return "ELITE SMART MONEY BOT PRO MAX"
 
-# ================= KEYS =================
-API_KEY = "52489f2772614f87957488969609b2e1"
-TELEGRAM_TOKEN = "8764783714:AAF0KdadTOWBcyMW_KpSdZfcWwrqiShELlw"
-CHAT_ID = "928499759"
+# ================= API KEYS =================
+API_KEY = "PUT_YOUR_TWELVEDATA_API_KEY"
+TELEGRAM_TOKEN = "PUT_YOUR_TELEGRAM_BOT_TOKEN"
+CHAT_ID = "PUT_YOUR_CHAT_ID"
 
 # ================= PAIRS =================
 PAIRS = {
+
     "EURUSD": "EUR/USD",
     "GBPUSD": "GBP/USD",
     "USDJPY": "USD/JPY",
+
+    "GBPJPY": "GBP/JPY",
+    "EURJPY": "EUR/JPY",
+
+    "AUDUSD": "AUD/USD",
+
     "XAUUSD": "XAU/USD"
 }
 
@@ -51,6 +58,7 @@ def calculate_ema(prices, period):
     ema = sum(prices[:period]) / period
 
     for price in prices[period:]:
+
         ema = ((price - ema) * multiplier) + ema
 
     return ema
@@ -64,11 +72,10 @@ def trend(closes):
     ema50 = calculate_ema(closes, 50)
     ema200 = calculate_ema(closes, 200)
 
-    # EMA slope
-    prev_ema50 = calculate_ema(closes[:-1], 50)
+    previous_ema50 = calculate_ema(closes[:-1], 50)
 
-    bullish_slope = ema50 > prev_ema50
-    bearish_slope = ema50 < prev_ema50
+    bullish_slope = ema50 > previous_ema50
+    bearish_slope = ema50 < previous_ema50
 
     if ema50 > ema200 and bullish_slope:
         return "BUY"
@@ -78,8 +85,24 @@ def trend(closes):
 
     return None
 
+# ================= BREAK OF STRUCTURE =================
+def break_of_structure(closes, highs, lows):
+
+    current_price = closes[-1]
+
+    recent_high = max(highs[-10:])
+    recent_low = min(lows[-10:])
+
+    if current_price > recent_high:
+        return "BUY"
+
+    if current_price < recent_low:
+        return "SELL"
+
+    return None
+
 # ================= MARKET DATA =================
-def get_candles(symbol, interval="1h", size=250):
+def get_candles(symbol, interval="1h", size=200):
 
     try:
 
@@ -92,10 +115,13 @@ def get_candles(symbol, interval="1h", size=250):
         )
 
         response = requests.get(url, timeout=10)
+
         data = response.json()
 
         if not data or "values" not in data:
+
             print("API ERROR:", data)
+
             return None
 
         values = data["values"][::-1]
@@ -108,32 +134,18 @@ def get_candles(symbol, interval="1h", size=250):
         return opens, closes, highs, lows
 
     except Exception as e:
+
         print("DATA ERROR:", e)
+
         return None
-
-# ================= BOS =================
-def break_of_structure(closes, highs, lows):
-
-    recent_high = max(highs[-10:])
-    recent_low = min(lows[-10:])
-
-    current_price = closes[-1]
-
-    if current_price > recent_high:
-        return "BUY"
-
-    if current_price < recent_low:
-        return "SELL"
-
-    return None
 
 # ================= ANALYSIS =================
 def analyze(pair, symbol):
 
     # ================= MULTI TF =================
-    data_4h = get_candles(symbol, "4h", 250)
-    data_1h = get_candles(symbol, "1h", 250)
-    data_30m = get_candles(symbol, "30min", 250)
+    data_4h = get_candles(symbol, "4h", 200)
+    data_1h = get_candles(symbol, "1h", 200)
+    data_30m = get_candles(symbol, "30min", 200)
 
     if not data_4h or not data_1h or not data_30m:
         return None
@@ -143,14 +155,14 @@ def analyze(pair, symbol):
     o1, c1, h1, l1 = data_1h
     o30, c30, h30, l30 = data_30m
 
-    # ================= TRENDS =================
+    # ================= TREND =================
     trend_4h = trend(c4)
     trend_1h = trend(c1)
 
     if not trend_4h or not trend_1h:
         return None
 
-    # Both trends must align
+    # BOTH MUST MATCH
     if trend_4h != trend_1h:
         return None
 
@@ -174,11 +186,10 @@ def analyze(pair, symbol):
     if bos != direction:
         return None
 
-    # ================= PULLBACK ZONE =================
+    # ================= PULLBACK =================
     recent_high = max(h30[-20:])
     recent_low = min(l30[-20:])
 
-    # Less restrictive pullback
     bullish_pullback = (
         direction == "BUY"
         and l30[-1] <= recent_low * 1.01
@@ -195,7 +206,7 @@ def analyze(pair, symbol):
     # ================= STOP LOSS BUFFER =================
     pip_buffer = 0.0015
 
-    # Gold special handling
+    # GOLD SPECIAL CONDITION
     if pair == "XAUUSD":
         pip_buffer = 3.0
 
@@ -231,12 +242,15 @@ def analyze(pair, symbol):
         dca2 = price + (risk * 0.50)
         dca3 = price + (risk * 0.75)
 
+    # ================= CONFIDENCE =================
     confidence = 88
 
+    # ================= RETURN =================
     return {
 
         "pair": pair,
         "signal": direction,
+
         "confidence": confidence,
 
         "entry": round(price, 5),
@@ -265,69 +279,61 @@ def run_bot():
 
         try:
 
-            results = []
-
             for pair, symbol in PAIRS.items():
 
                 result = analyze(pair, symbol)
 
+                # SEND SIGNAL IMMEDIATELY ON DETECTION
                 if result:
-                    results.append(result)
 
-            if results:
+                    signal_key = (
+                        f"{result['pair']}_{result['signal']}"
+                    )
 
-                best = max(
-                    results,
-                    key=lambda x: x["confidence"]
-                )
+                    # PREVENT DUPLICATE SIGNALS
+                    if last_signal.get(result["pair"]) != signal_key:
 
-                signal_key = (
-                    f"{best['pair']}_{best['signal']}"
-                )
+                        last_signal[result["pair"]] = signal_key
 
-                # Prevent duplicates
-                if last_signal.get(best["pair"]) != signal_key:
-
-                    last_signal[best["pair"]] = signal_key
-
-                    msg = f"""
+                        msg = f"""
 🔥 ELITE SMART MONEY SIGNAL 🔥
 
-PAIR: {best['pair']}
+PAIR: {result['pair']}
 
-SIGNAL: {best['signal']}
+SIGNAL: {result['signal']}
 
-CONFIDENCE: {best['confidence']}%
+CONFIDENCE: {result['confidence']}%
 
-4H TREND: {best['trend_4h']}
-1H CONFIRMATION: {best['trend_1h']}
+4H TREND: {result['trend_4h']}
+1H CONFIRMATION: {result['trend_1h']}
 
-30M EMA50: {best['ema50_30m']}
+30M EMA50: {result['ema50_30m']}
 
-ENTRY: {best['entry']}
+ENTRY: {result['entry']}
 
-PULLBACK ZONE: {best['pullback']}
+PULLBACK ZONE: {result['pullback']}
 
 DCA / GRID LEVELS:
 
-DCA 1: {best['dca1']}
-DCA 2: {best['dca2']}
-DCA 3: {best['dca3']}
+DCA 1: {result['dca1']}
+DCA 2: {result['dca2']}
+DCA 3: {result['dca3']}
 
-STOP LOSS: {best['sl']}
+STOP LOSS: {result['sl']}
 
-TAKE PROFIT: {best['tp']}
+TAKE PROFIT: {result['tp']}
 """
 
-                    send_telegram(msg)
+                        send_telegram(msg)
 
-                    print("SIGNAL SENT")
+                        print(f"SIGNAL SENT FOR {pair}")
 
         except Exception as e:
+
             print("BOT LOOP ERROR:", e)
 
-        # Faster scanning
-        time.sleep(300)
+        # SCAN EVERY 10 MINUTES
+        time.sleep(600)
 
 # ================= MANUAL SCAN =================
 @app.route("/scan")
@@ -359,11 +365,13 @@ def scan():
 # ================= START =================
 if __name__ == "__main__":
 
+    # START BOT LOOP
     Thread(
         target=run_bot,
         daemon=True
     ).start()
 
+    # RENDER PORT
     port = int(
         os.environ.get("PORT", 10000)
     )
