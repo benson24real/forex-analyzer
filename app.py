@@ -39,7 +39,7 @@ def send_telegram(msg):
         print("TELEGRAM ERROR:", e)
 
 # ================= DATA =================
-def get_candles(symbol, interval="15min", size=200):
+def get_candles(symbol, interval="1h", size=200):
     try:
         url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&outputsize={size}&apikey={API_KEY}"
         data = requests.get(url, timeout=10).json()
